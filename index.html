@@ -17,9 +17,15 @@
   .tally b { color: var(--text); }
   .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; vertical-align: middle; }
   label { margin-left: auto; color: var(--muted); cursor: pointer; user-select: none; }
-  main { padding: 6px 16px 40px; }
-  .group { margin-top: 8px; border-radius: 10px; }
-  .group.drop { box-shadow: 0 0 0 1px var(--working); }
+  main { padding: 6px 16px 40px; display: flex; align-items: stretch; }
+  .group { min-width: 0; padding: 0 14px; border-radius: 10px; }
+  .group:first-child { padding-left: 0; }
+  .group:last-child { padding-right: 0; }
+  .group + .group { border-left: 2px solid var(--line); }
+  .group.drop { box-shadow: inset 0 0 0 1px var(--working); }
+  .newzone { display: none; margin-bottom: 14px; padding: 14px; border: 1px dashed var(--muted); border-radius: 10px; color: var(--muted); text-align: center; }
+  body.dragging-session .newzone { display: block; }
+  .newzone.drop { border-color: var(--working); color: var(--text); }
   .group h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0; padding: 8px 2px; display: flex; gap: 8px; align-items: center; }
   .group h3:hover .pen { visibility: visible; }
   .cols { display: flex; align-items: flex-start; gap: 14px; }
@@ -61,6 +67,7 @@
   <h1>Overworld</h1>
   <div class="tally" id="tally"></div>
   <button class="add" id="autoAll" title="Name every workspace and session from its conversation (key: a)">✨ Auto-name all</button>
+  <button class="add" id="newGroup" title="New empty group">+ New group</button>
   <span class="hint">drag a session onto another region to move it · a auto-names · ⌘⇧1 back to your last tab</span>
   <label><input type="checkbox" id="showShells"> show plain shells</label>
 </header>
@@ -73,6 +80,7 @@ try { showShells.checked = localStorage.getItem("ow.shells") === "1"; } catch (e
 showShells.onchange = () => { try { localStorage.setItem("ow.shells", showShells.checked ? "1" : "0"); } catch (e) {} render(last); };
 let last = null, dragging = null, draggingRegion = null, armed = null, editing = false, naming = null;
 const autoAll = document.getElementById("autoAll");
+document.getElementById("newGroup").onclick = () => post("/api/new-group");
 
 // Auto-name: one Haiku call names the workspace(s) and their agent tabs. naming = "all" or a workspace id while it runs.
 async function autoname(workspace) {
@@ -133,8 +141,8 @@ function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.
 function sessionEl(t, isChild) {
   const b = el("div", "session " + t.status + (isChild ? " child" : "") + (t.here ? " here" : ""));
   b.draggable = true;
-  b.ondragstart = e => { dragging = t; e.dataTransfer.setData("text/plain", t.id); b.classList.add("dragging"); };
-  b.ondragend = () => { dragging = null; b.classList.remove("dragging"); document.querySelectorAll(".drop").forEach(r => r.classList.remove("drop")); };
+  b.ondragstart = e => { dragging = t; e.dataTransfer.setData("text/plain", t.id); b.classList.add("dragging"); document.body.classList.add("dragging-session"); };
+  b.ondragend = () => { dragging = null; b.classList.remove("dragging"); document.body.classList.remove("dragging-session"); document.querySelectorAll(".drop").forEach(r => r.classList.remove("drop")); };
   b.style.setProperty("--c", `var(--${t.status})`);
   const row = el("div", "row");
   const label = el("span", "title", (isChild ? "↳ " : "") + t.title);
@@ -197,30 +205,56 @@ function render(state) {
     return box;
   });
 
-  // One section per cmux workspace group (the same groups as the sidebar), then ungrouped. Drag a workspace header onto a section to regroup it.
-  const sections = [...(state.groups || []), { id: "", name: "Ungrouped" }].map(g => {
-    const mine = boxes.filter(b => b.dataset.group === g.id);
-    const sec = el("section", "group");
+  // Groups side by side (same groups as the sidebar), then Ungrouped; columns split by workspace count.
+  const all = [...(state.groups || []), { id: "", name: "Ungrouped" }]
+    .map(g => ({ g, mine: boxes.filter(b => b.dataset.group === g.id) }))
+    .filter(x => x.g.id || x.mine.length);
+  const total = Math.max(1, Math.floor((map.clientWidth - 32 + GAP) / (COL_MIN + GAP)));
+  const workspaces = all.reduce((n, x) => n + x.mine.length, 0) || 1;
+  all.forEach(x => { x.n = Math.max(1, Math.round(total * x.mine.length / workspaces)); });
+  const y = scrollY;  // rebuilding collapses the page for a moment, which would snap the scroll to the top
+  map.replaceChildren(...all.map(x => {
+    const { g, mine } = x;
+    const sec = el("section", "group"); sec.style.flex = x.n;
     const h = el("h3"); const name = el("span", null, g.name);
     h.append(name);
     if (g.id) h.append(pencil(name, g.name, n => post("/api/rename-group", { group: g.id, name: n })));
     h.append(el("span", "count", mine.length + (mine.length === 1 ? " workspace" : " workspaces")));
+    const plus = el("button", "add", "+"); plus.title = "New workspace in " + g.name;
+    plus.onclick = () => post("/api/new-workspace", { group: g.id || null });
+    h.append(plus);
+    if (g.id) {
+      const x2 = el("span", "x" + (armed === g.id ? " armed" : ""), armed === g.id ? "delete group?" : "×");
+      x2.title = "Delete this group (its workspaces move to Ungrouped)";
+      x2.style.visibility = "visible";
+      x2.onclick = () => {
+        if (armed === g.id) { armed = null; post("/api/delete-group", { group: g.id }); }
+        else { armed = g.id; setTimeout(() => { if (armed === g.id) { armed = null; render(last); } }, 3000); }
+        render(last);
+      };
+      h.append(x2);
+    }
+    const zone = el("div", "newzone", "Drop a session here to give it its own workspace");
+    zone.ondragover = e => { if (dragging) { e.preventDefault(); e.stopPropagation(); zone.classList.add("drop"); } };
+    zone.ondragleave = () => zone.classList.remove("drop");
+    zone.ondrop = e => { if (!dragging) return; e.preventDefault(); e.stopPropagation(); zone.classList.remove("drop");
+      post("/api/split", { surface: dragging.id, workspace: dragging.workspace, title: dragging.title, group: g.id || null }); };
     const cols = el("div", "cols");
-    sec.append(h, cols);
+    sec.append(h, zone, cols);
     sec.ondragover = e => { if (draggingRegion && (draggingRegion.group || "") !== g.id) { e.preventDefault(); sec.classList.add("drop"); } };
     sec.ondragleave = e => { if (!sec.contains(e.relatedTarget)) sec.classList.remove("drop"); };
     sec.ondrop = e => { if (!draggingRegion) return; e.preventDefault(); sec.classList.remove("drop"); post("/api/group", { workspace: draggingRegion.id, group: g.id || null }); };
-    return { sec, cols, mine, keep: g.id || mine.length };
-  }).filter(x => x.keep);
-  map.replaceChildren(...sections.map(x => x.sec));
+    x.cols = cols;
+    return sec;
+  }));
 
-  // Masonry per section: each workspace goes into the currently shortest column, so rank order reads left to right.
-  const n = Math.max(1, Math.floor((map.clientWidth - 32 + GAP) / (COL_MIN + GAP)));
-  sections.forEach(({ cols, mine }) => {
+  // Masonry per group: each workspace goes into that group's currently shortest column.
+  all.forEach(({ cols, mine, n }) => {
     const colEls = Array.from({ length: n }, () => el("div", "col"));
     cols.replaceChildren(...colEls);
     mine.forEach(box => colEls.reduce((a, b) => (b.offsetHeight < a.offsetHeight ? b : a)).append(box));
   });
+  scrollTo(0, y);
 }
 
 async function tick() {

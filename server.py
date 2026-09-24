@@ -373,6 +373,28 @@ class Handler(BaseHTTPRequestHandler):
                 cmux("workspace-group", "add", "--group", body["group"], "--workspace", body["workspace"])
             else:
                 cmux("workspace-group", "remove", "--workspace", body["workspace"])
+        elif self.path == "/api/new-workspace":
+            group = ["--group", body["group"]] if body.get("group") else []
+            cmux("new-workspace", "--name", "New Workspace", *group, "--command", NEW_SESSION_COMMAND, "--focus", "false")
+        elif self.path == "/api/split":
+            # Tab -> its own new workspace (cmux creates it ungrouped), then into the group it was dropped on.
+            out = cmux("--id-format", "both", "move-tab-to-new-workspace", "--surface", body["surface"], "--workspace", body["workspace"],
+                       "--title", body["title"], "--focus", "false")
+            created = re.search(r"created_workspace=\S+ \(([0-9A-F-]{36})\)", out)
+            if created and body.get("group"):
+                cmux("workspace-group", "add", "--group", body["group"], "--workspace", created.group(1))
+        elif self.path == "/api/new-group":
+            cmux("workspace-group", "create", "--name", "New Group")
+        elif self.path == "/api/delete-group":
+            # Members move to Ungrouped. cmux only removes a generated (empty header) anchor for an anchor-only group,
+            # so otherwise ungroup first and then close that empty header workspace ourselves.
+            g = next(g for g in json.loads(cmux("workspace-group", "list", "--json"))["groups"] if g["ref"] == body["group"])
+            if g["anchor_workspace_is_generated"] and g["member_count"] == 1:
+                cmux("workspace-group", "ungroup", g["ref"], "--remove-generated-anchor")
+            else:
+                cmux("workspace-group", "ungroup", g["ref"])
+                if g["anchor_workspace_is_generated"]:
+                    cmux("close-workspace", "--workspace", g["anchor_workspace_ref"])
         elif self.path == "/api/rename-group":
             cmux("workspace-group", "rename", body["group"], "--name", body["name"])
         elif self.path == "/api/close":

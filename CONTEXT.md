@@ -56,3 +56,11 @@ Personal tool. Visual "overworld" of all cmux agent sessions (workspaces = regio
 - cmux generates an empty anchor workspace per group (it IS the group header in the sidebar). The map hides generated anchors.
 - Overworld: one section per group in sidebar order, then Ungrouped. Drag a workspace by its header onto a section → `workspace-group add` (`remove` for Ungrouped), via `/api/group`. ✎ on a section header → `workspace-group rename`. Verified: round trip one workspace → Personal → Work. ⌘1 slot unaffected (Overworld stays index 0, pinned).
 - Cost: the page grew from 958px to 1164px at 1480x958, because each group runs its own masonry and Harness (10 sessions) sets the Work section's height.
+
+## 2026-09-23 (groups side by side, split-out, folder management)
+- Groups render side by side, split by a 2px divider. Columns are shared out by workspace count (e.g. New Group 1 col, Work 2, Personal 2 at 1480px).
+- Scroll jump fixed: every 3s refresh rebuilt the map, the page collapsed for a moment, and the browser clamped the scroll to 0. render() now saves and restores `scrollY`. Verified: 700px held across two refreshes.
+- "Places Map and Recipe Database" disappeared because Personal's generated header workspace got closed. cmux then promoted the next member to header, so that workspace became the folder row. Fixed by ungroup + recreate (`overworld-personal-2`, new generated anchor). Closing a group's header in the sidebar does this again.
+- Drag a session onto a group's dashed drop zone (shown only while dragging) → `move-tab-to-new-workspace` (needs `--workspace` too, or it says "Tab not found"), then `workspace-group add`. Drag more sessions onto the new workspace as before.
+- `+` on a group header → `new-workspace --group --command claude`. `+ New group` (header bar) → `workspace-group create`. `×` on a group header, clicked twice → ungroup; the workspaces move to Ungrouped. cmux's `--remove-generated-anchor` only works for anchor-only groups, so for a group with members we ungroup and then `close-workspace` the generated header.
+- Native equivalents in the sidebar: right-click a folder → Rename Group…, Delete Group, Ungroup Workspaces, New Workspace in Group. ⌃⌘G = new empty group, ⌘⇧G = group the selected workspaces. Right-click a workspace → New Group from Workspace / Remove from Group.
