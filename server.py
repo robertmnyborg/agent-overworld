@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Agent Overworld: serves a map of cmux workspaces (regions) and tabs (towns).
+"""Agent Overworld: serves a map of cmux workspaces (regions) and tabs (sessions).
 
 Reads cmux's own records; writes nothing except ~/.overworld/edges.jsonl (via spinoff.sh).
 Started by autostart.zsh from the first cmux shell (cmux's socket only accepts processes launched inside cmux).
@@ -211,19 +211,19 @@ def state():
     if not raw.strip():
         return {"regions": [], "edges": [], "at": time.time(), "error": "cmux is not running"}
     tree = json.loads(raw)
-    sessions, unread, events = agent_sessions(), notifications(), hook_events()
+    agents, unread, events = agent_sessions(), notifications(), hook_events()
     edges = [json.loads(l) for l in EDGES.read_text().splitlines()] if EDGES.exists() else []
     regions = []
     for window in tree["windows"]:
         for ws in window["workspaces"]:
             if ws["title"] == "Overworld":
                 continue
-            towns = []
+            sessions = []
             for pane in ws["panes"]:
                 for sf in pane["surfaces"]:
                     if sf["type"] != "terminal":
                         continue
-                    sess = sessions.get(sf["id"])
+                    sess = agents.get(sf["id"])
                     recap = sess["recap"] if sess else ""
                     if sess and not recap and alive(sess["pid"]):
                         recap = screen_recap(sf["id"], ws["id"])
@@ -231,15 +231,15 @@ def state():
                     since = event[1] if event else None
                     if event and event[0] == "SessionStart" and sess and sess.get("turn_at"):
                         since = sess["turn_at"]  # a relaunch restarts every session; age from the last real turn
-                    towns.append({"id": sf["id"], "title": sf["title"], "workspace": ws["id"],
+                    sessions.append({"id": sf["id"], "title": sf["title"], "workspace": ws["id"],
                                   "status": status(sess, unread.get(sf["id"]), event),
                                   "since": since, "recap": recap,
                                   "agent": sess["agent"] if sess else None,
                                   "cwd": sess["cwd"] if sess else None,
                                   "updated": sess["updated"] if sess else None,
                                   "here": sf.get("selected_in_pane") and pane.get("focused") and ws.get("selected")})
-            if towns:
-                regions.append({"id": ws["id"], "title": ws["title"], "towns": towns})
+            if sessions:
+                regions.append({"id": ws["id"], "title": ws["title"], "sessions": sessions})
     return {"regions": regions, "edges": edges, "at": time.time()}
 
 
@@ -268,6 +268,11 @@ class Handler(BaseHTTPRequestHandler):
             cmux("move-surface", "--surface", body["surface"], "--workspace", body["workspace"], "--focus", "false")
         elif self.path == "/api/new":
             cmux("new-surface", "--workspace", body["workspace"], "--command", NEW_SESSION_COMMAND, "--focus", "false")
+        elif self.path == "/api/rename":
+            if body.get("surface"):
+                cmux("rename-tab", "--workspace", body["workspace"], "--surface", body["surface"], "--", body["title"])
+            else:
+                cmux("workspace-action", "--workspace", body["workspace"], "--action", "rename", "--title", body["title"])
         elif self.path == "/api/close":
             cmux("close-surface", "--surface", body["surface"], "--workspace", body["workspace"])
         else:
