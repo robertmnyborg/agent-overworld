@@ -76,12 +76,15 @@ async function autoname(workspace) {
   render(last);
   try {
     const res = await (await fetch("/api/autoname", { method: "POST", body: JSON.stringify(workspace ? { workspace } : {}) })).json();
-    if (res.error) console.log("[overworld] autoname failed", res.error);
-  } finally {
     naming = null;
-    autoAll.textContent = "✨ Auto-name all";
-    tick();
+    autoAll.textContent = res.error ? "✨ failed, see log" : `✨ renamed ${res.renamed}`;
+    if (res.error) console.log("[overworld] autoname failed", res.error);
+  } catch (e) {
+    naming = null;
+    autoAll.textContent = "✨ failed, see log";
   }
+  setTimeout(() => { if (!naming) autoAll.textContent = "✨ Auto-name all"; }, 4000);
+  tick();
 }
 autoAll.onclick = () => autoname();
 document.addEventListener("keydown", e => {

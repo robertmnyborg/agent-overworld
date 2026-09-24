@@ -6,6 +6,7 @@ Started by autostart.zsh from the first cmux shell (cmux's socket only accepts p
 While cmux is running, keeps a pinned "Overworld" workspace (browser pane on this server) in slot 1 (⌘1).
 """
 import json, os, re, subprocess, threading, time
+from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -19,6 +20,7 @@ CLAUDE = str(Path.home() / ".local" / "bin" / "claude")
 # Headless naming call: no settings/hooks/MCP/tools, nothing saved to ~/.claude/projects.
 NAMER = [CLAUDE, "-p", "--model", "haiku", "--setting-sources", "", "--no-session-persistence", "--strict-mcp-config",
          "--tools", "", "--disable-slash-commands", "--output-format", "json"]
+NAME_TIMEOUT = 60  # seconds per workspace call
 NAME_WORDS = {"t": 3, "w": 5}  # max words for tab (t) and workspace (w) names
 NAME_SCHEMA = {"type": "object", "required": ["names"], "properties": {"names": {"type": "array", "items": {
     "type": "object", "required": ["key", "name"], "properties": {"key": {"type": "string"}, "name": {"type": "string"}}}}}}
@@ -205,10 +207,21 @@ def session_brief(transcript):
     return (json.loads(f'"{titles[-1]}"') if titles else ""), first
 
 
+def name_batch(workspace_payload):
+    """One headless Haiku call for one workspace and its tabs -> [{key, name}]."""
+    out = subprocess.run([*NAMER, "--json-schema", json.dumps(NAME_SCHEMA)], input=NAME_RULES + json.dumps(workspace_payload, indent=1),
+                         capture_output=True, text=True, timeout=NAME_TIMEOUT, cwd="/tmp",  # /tmp: keeps ~/CLAUDE.md out of the prompt
+                         env={**os.environ, "MAX_THINKING_TOKENS": "0"})  # thinking made this 18-78s instead of ~5s
+    result = json.loads(out.stdout)
+    if result.get("is_error"):
+        raise RuntimeError(result.get("result", "naming call failed"))
+    return result["structured_output"]["names"], result.get("total_cost_usd") or 0
+
+
 def autoname(workspace=None):
-    """Name workspaces (all, or one) and their agent tabs from session content with one headless Haiku call, then apply."""
+    """Name workspaces (all, or one) and their agent tabs from session content, one Haiku call per workspace in parallel."""
     agents = agent_sessions()
-    targets, payload = {}, []
+    targets, payloads = {}, []
     for i, r in enumerate(state()["regions"]):
         if workspace not in (None, r["id"]):
             continue
@@ -222,27 +235,23 @@ def autoname(workspace=None):
             tabs.append({"key": key, "current_name": t["title"], "session_title": title, "first_prompt": first, "last_reply": t["recap"]})
         if tabs:
             targets[f"w{i}"] = (r["id"], None)
-            payload.append({"key": f"w{i}", "current_name": r["title"], "tabs": tabs})
-    if not payload:
-        return {"renamed": 0}
-    out = subprocess.run([*NAMER, "--json-schema", json.dumps(NAME_SCHEMA)], input=NAME_RULES + json.dumps(payload, indent=1),
-                         capture_output=True, text=True, timeout=120, cwd="/tmp")  # /tmp: keeps ~/CLAUDE.md out of the prompt
-    result = json.loads(out.stdout)
-    if result.get("is_error"):
-        raise RuntimeError(result.get("result", "naming call failed"))
-    renamed = 0
-    for entry in result["structured_output"]["names"]:
-        if entry["key"] not in targets:
-            continue
-        ws, surface = targets[entry["key"]]
-        name = " ".join(entry["name"].strip().strip('."\'').split()[:NAME_WORDS[entry["key"][0]]])
-        if surface:
-            cmux("rename-tab", "--workspace", ws, "--surface", surface, "--", name)
-        else:
-            cmux("workspace-action", "--workspace", ws, "--action", "rename", "--title", name)
-        renamed += 1
-    print(f"{time.strftime('%H:%M:%S')} autoname {workspace or 'all'}: {renamed} renamed, ${result.get('total_cost_usd', 0):.3f}", flush=True)
-    return {"renamed": renamed, "cost_usd": result.get("total_cost_usd")}
+            payloads.append({"key": f"w{i}", "current_name": r["title"], "tabs": tabs})
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        batches = list(pool.map(name_batch, payloads))
+    renamed, cost = 0, sum(c for _, c in batches)
+    for names, _ in batches:
+        for entry in names:
+            if entry["key"] not in targets:
+                continue
+            ws, surface = targets[entry["key"]]
+            name = " ".join(entry["name"].strip().strip('."\'').split()[:NAME_WORDS[entry["key"][0]]])
+            if surface:
+                cmux("rename-tab", "--workspace", ws, "--surface", surface, "--", name)
+            else:
+                cmux("workspace-action", "--workspace", ws, "--action", "rename", "--title", name)
+            renamed += 1
+    print(f"{time.strftime('%H:%M:%S')} autoname {workspace or 'all'}: {renamed} renamed in {len(payloads)} calls, ${cost:.3f}", flush=True)
+    return {"renamed": renamed, "cost_usd": cost}
 
 
 def notifications():
@@ -354,6 +363,7 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 return self._send(200, autoname(body.get("workspace")))
             except (subprocess.SubprocessError, json.JSONDecodeError, KeyError, RuntimeError) as e:
+                print(f"{time.strftime('%H:%M:%S')} autoname failed: {e!r}"[:400], flush=True)
                 return self._send(502, {"error": repr(e)[:300]})
         elif self.path == "/api/close":
             cmux("close-surface", "--surface", body["surface"], "--workspace", body["workspace"])

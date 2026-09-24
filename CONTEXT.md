@@ -47,3 +47,6 @@ Personal tool. Visual "overworld" of all cmux agent sessions (workspaces = regio
 - Test: Feedback/Notes → "Team Feedback Notes" / "Feedback Patterns", 9.9s, $0.007 (Claude Code's reported cost). Names restored after.
 - Auth: no ANTHROPIC_API_KEY on this Mac; `--bare` fails ("Not logged in") because it skips keychain reads, so the call uses the stripped-settings flags instead.
 - Bug fixed: cmux's `activeSessionsBySurface` dropped this live session, so its tab read "shell". `agent_sessions` now picks per surface from all session records: live pid first, then newest `updatedAt`.
+- Fix (same day): Auto-name all spun, then timed out. The single 22-tab call took 73s and overran the 120s limit, and the page swallowed the error. Cause: headless Claude Code runs Haiku with extended thinking (1.6k-7.8k output tokens for ~11 names). Fix: `MAX_THINKING_TOKENS=0` plus one call per workspace in parallel. All 28 names now take 5.0s total, $0.026. The button shows "renamed N" or "failed", and failures go to the server log.
+- The one-big-batch run also mismatched keys (the visualization tab came out as "Acceptance Criteria"). Per-workspace calls fixed that.
+- Pre-autoname names saved in `~/.overworld/names-original.txt`.
