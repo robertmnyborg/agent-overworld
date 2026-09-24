@@ -15,6 +15,18 @@ CMUXTERM = Path.home() / ".cmuxterm"
 EDGES = Path.home() / ".overworld" / "edges.jsonl"
 PIDFILE = Path.home() / ".overworld" / "server.pid"
 NEW_SESSION_COMMAND = "claude"
+CLAUDE = str(Path.home() / ".local" / "bin" / "claude")
+# Headless naming call: no settings/hooks/MCP/tools, nothing saved to ~/.claude/projects.
+NAMER = [CLAUDE, "-p", "--model", "haiku", "--setting-sources", "", "--no-session-persistence", "--strict-mcp-config",
+         "--tools", "", "--disable-slash-commands", "--output-format", "json"]
+NAME_WORDS = {"t": 3, "w": 5}  # max words for tab (t) and workspace (w) names
+NAME_SCHEMA = {"type": "object", "required": ["names"], "properties": {"names": {"type": "array", "items": {
+    "type": "object", "required": ["key", "name"], "properties": {"key": {"type": "string"}, "name": {"type": "string"}}}}}}
+NAME_RULES = """Name cmux workspaces and the Claude Code session tabs inside them, from what each session is about.
+Tab names: 2-3 words. Workspace names: 2-5 words covering the tabs inside it. Concrete nouns from the work (project, feature, person, artifact).
+No quotes, no emoji, no trailing punctuation, no generic words like "Session", "Chat", "Claude", or "Work". Title Case.
+Return one entry per key given (every workspace key "w*" and every tab key "t*"). Input:
+"""
 
 SCREEN_TTL = 30  # seconds to cache read-screen recaps for agents without a transcript recap
 _screen_cache = {}
@@ -152,13 +164,18 @@ def agent_sessions():
     out = {}
     claude = load_json(CMUXTERM / "claude-hook-sessions.json")
     sessions = claude.get("sessions", {})
-    for surface, ref in claude.get("activeSessionsBySurface", {}).items():
-        s = sessions.get(ref["sessionId"])
-        if s:
-            text, turn_at, turn_role = last_reply(s.get("transcriptPath"))
-            out[surface] = {"agent": "claude", "lifecycle": s.get("agentLifecycle"), "recap": text or s.get("lastBody") or "",
-                            "cwd": s.get("cwd"), "updated": s.get("updatedAt"), "pid": s.get("pid"),
-                            "turn_at": turn_at, "turn_role": turn_role}
+    # cmux's activeSessionsBySurface can drop a live session, so pick per surface: live process first, then newest.
+    best = {}
+    for s in sessions.values():
+        surface = s.get("surfaceId")
+        rank = (alive(s.get("pid")), s.get("updatedAt") or 0)
+        if surface and (surface not in best or rank > best[surface][0]):
+            best[surface] = (rank, s)
+    for surface, (_, s) in best.items():
+        text, turn_at, turn_role = last_reply(s.get("transcriptPath"))
+        out[surface] = {"agent": "claude", "lifecycle": s.get("agentLifecycle"), "recap": text or s.get("lastBody") or "",
+                        "cwd": s.get("cwd"), "updated": s.get("updatedAt"), "pid": s.get("pid"),
+                        "turn_at": turn_at, "turn_role": turn_role, "transcript": s.get("transcriptPath")}
     agy = load_json(CMUXTERM / "antigravity-hook-sessions.json").get("sessions", {})
     for s in agy.values():
         cur = out.get(s["surfaceId"])
@@ -166,6 +183,66 @@ def agent_sessions():
             out[s["surfaceId"]] = {"agent": "agy", "lifecycle": s.get("agentLifecycle"), "recap": "",
                                    "cwd": s.get("cwd"), "updated": s.get("updatedAt"), "pid": s.get("pid")}
     return out
+
+
+def session_brief(transcript):
+    """(Claude Code's own title for the session, first real user prompt) from a transcript."""
+    path = Path(transcript or "")
+    if not path.is_file():
+        return "", ""
+    text = path.read_text(errors="replace")
+    titles = re.findall(r'"aiTitle":"((?:[^"\\]|\\.)*)"', text)
+    first = ""
+    for line in text.splitlines():
+        if '"type":"user"' not in line:
+            continue
+        content = json.loads(line).get("message", {}).get("content")
+        if isinstance(content, list):
+            content = " ".join(c.get("text", "") for c in content if isinstance(c, dict) and c.get("type") == "text")
+        if content and not content.lstrip().startswith("<"):
+            first = plain(content)[:300]
+            break
+    return (json.loads(f'"{titles[-1]}"') if titles else ""), first
+
+
+def autoname(workspace=None):
+    """Name workspaces (all, or one) and their agent tabs from session content with one headless Haiku call, then apply."""
+    agents = agent_sessions()
+    targets, payload = {}, []
+    for i, r in enumerate(state()["regions"]):
+        if workspace not in (None, r["id"]):
+            continue
+        tabs = []
+        for j, t in enumerate(r["sessions"]):
+            if not t["agent"]:
+                continue  # plain shell: nothing to name it from
+            title, first = session_brief(agents.get(t["id"], {}).get("transcript"))
+            key = f"t{i}_{j}"
+            targets[key] = (r["id"], t["id"])
+            tabs.append({"key": key, "current_name": t["title"], "session_title": title, "first_prompt": first, "last_reply": t["recap"]})
+        if tabs:
+            targets[f"w{i}"] = (r["id"], None)
+            payload.append({"key": f"w{i}", "current_name": r["title"], "tabs": tabs})
+    if not payload:
+        return {"renamed": 0}
+    out = subprocess.run([*NAMER, "--json-schema", json.dumps(NAME_SCHEMA)], input=NAME_RULES + json.dumps(payload, indent=1),
+                         capture_output=True, text=True, timeout=120, cwd="/tmp")  # /tmp: keeps ~/CLAUDE.md out of the prompt
+    result = json.loads(out.stdout)
+    if result.get("is_error"):
+        raise RuntimeError(result.get("result", "naming call failed"))
+    renamed = 0
+    for entry in result["structured_output"]["names"]:
+        if entry["key"] not in targets:
+            continue
+        ws, surface = targets[entry["key"]]
+        name = " ".join(entry["name"].strip().strip('."\'').split()[:NAME_WORDS[entry["key"][0]]])
+        if surface:
+            cmux("rename-tab", "--workspace", ws, "--surface", surface, "--", name)
+        else:
+            cmux("workspace-action", "--workspace", ws, "--action", "rename", "--title", name)
+        renamed += 1
+    print(f"{time.strftime('%H:%M:%S')} autoname {workspace or 'all'}: {renamed} renamed, ${result.get('total_cost_usd', 0):.3f}", flush=True)
+    return {"renamed": renamed, "cost_usd": result.get("total_cost_usd")}
 
 
 def notifications():
@@ -273,6 +350,11 @@ class Handler(BaseHTTPRequestHandler):
                 cmux("rename-tab", "--workspace", body["workspace"], "--surface", body["surface"], "--", body["title"])
             else:
                 cmux("workspace-action", "--workspace", body["workspace"], "--action", "rename", "--title", body["title"])
+        elif self.path == "/api/autoname":
+            try:
+                return self._send(200, autoname(body.get("workspace")))
+            except (subprocess.SubprocessError, json.JSONDecodeError, KeyError, RuntimeError) as e:
+                return self._send(502, {"error": repr(e)[:300]})
         elif self.path == "/api/close":
             cmux("close-surface", "--surface", body["surface"], "--workspace", body["workspace"])
         else:
