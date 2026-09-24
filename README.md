@@ -7,6 +7,8 @@ A live map of every cmux workspace (region) and tab (session), with each Claude/
 - `autostart.zsh`: source it from `~/.zshrc`. It starts the server from the first cmux shell, because cmux's socket only accepts processes launched inside cmux.
 - `spinoff.sh`: backs the `/spinoff` skill. It opens a child session from a handoff brief and records the parent link.
 
+Groups: sections follow cmux's native workspace groups (the sidebar folders). Drag a workspace header onto a section to regroup it.
+
 Shortcuts: ⌘1 opens the Overworld (it stays pinned in slot 1). ⌘⇧1 goes back to your last tab, via this line in `~/.config/cmux/cmux.json`:
 
 ```jsonc

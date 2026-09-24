@@ -299,10 +299,13 @@ def state():
     tree = json.loads(raw)
     agents, unread, events = agent_sessions(), notifications(), hook_events()
     edges = [json.loads(l) for l in EDGES.read_text().splitlines()] if EDGES.exists() else []
+    groups = json.loads(cmux("workspace-group", "list", "--json") or '{"groups": []}')["groups"]
+    group_of = {ref: g["ref"] for g in groups for ref in g["member_workspace_refs"]}
+    anchors = {g["anchor_workspace_ref"] for g in groups if g["anchor_workspace_is_generated"]}  # empty header workspaces cmux made
     regions = []
     for window in tree["windows"]:
         for ws in window["workspaces"]:
-            if ws["title"] == "Overworld":
+            if ws["title"] == "Overworld" or ws["ref"] in anchors:
                 continue
             sessions = []
             for pane in ws["panes"]:
@@ -325,8 +328,8 @@ def state():
                                   "updated": sess["updated"] if sess else None,
                                   "here": sf.get("selected_in_pane") and pane.get("focused") and ws.get("selected")})
             if sessions:
-                regions.append({"id": ws["id"], "title": ws["title"], "sessions": sessions})
-    return {"regions": regions, "edges": edges, "at": time.time()}
+                regions.append({"id": ws["id"], "title": ws["title"], "group": group_of.get(ws["ref"]), "sessions": sessions})
+    return {"regions": regions, "groups": [{"id": g["ref"], "name": g["name"]} for g in groups], "edges": edges, "at": time.time()}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -365,6 +368,13 @@ class Handler(BaseHTTPRequestHandler):
             except (subprocess.SubprocessError, json.JSONDecodeError, KeyError, RuntimeError) as e:
                 print(f"{time.strftime('%H:%M:%S')} autoname failed: {e!r}"[:400], flush=True)
                 return self._send(502, {"error": repr(e)[:300]})
+        elif self.path == "/api/group":
+            if body.get("group"):
+                cmux("workspace-group", "add", "--group", body["group"], "--workspace", body["workspace"])
+            else:
+                cmux("workspace-group", "remove", "--workspace", body["workspace"])
+        elif self.path == "/api/rename-group":
+            cmux("workspace-group", "rename", body["group"], "--name", body["name"])
         elif self.path == "/api/close":
             cmux("close-surface", "--surface", body["surface"], "--workspace", body["workspace"])
         else:

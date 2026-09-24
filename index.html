@@ -17,7 +17,13 @@
   .tally b { color: var(--text); }
   .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; vertical-align: middle; }
   label { margin-left: auto; color: var(--muted); cursor: pointer; user-select: none; }
-  main { display: flex; align-items: flex-start; gap: 14px; padding: 14px 16px 40px; }
+  main { padding: 6px 16px 40px; }
+  .group { margin-top: 8px; border-radius: 10px; }
+  .group.drop { box-shadow: 0 0 0 1px var(--working); }
+  .group h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0; padding: 8px 2px; display: flex; gap: 8px; align-items: center; }
+  .group h3:hover .pen { visibility: visible; }
+  .cols { display: flex; align-items: flex-start; gap: 14px; }
+  .region h2 { cursor: grab; }
   .col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 14px; }
   .region { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
   .region.drop { border-color: var(--working); box-shadow: 0 0 0 1px var(--working); }
@@ -65,7 +71,7 @@ const LABEL = { waiting: "your turn", done: "finished", working: "working", idle
 const map = document.getElementById("map"), tally = document.getElementById("tally"), showShells = document.getElementById("showShells");
 try { showShells.checked = localStorage.getItem("ow.shells") === "1"; } catch (e) {}
 showShells.onchange = () => { try { localStorage.setItem("ow.shells", showShells.checked ? "1" : "0"); } catch (e) {} render(last); };
-let last = null, dragging = null, armed = null, editing = false, naming = null;
+let last = null, dragging = null, draggingRegion = null, armed = null, editing = false, naming = null;
 const autoAll = document.getElementById("autoAll");
 
 // Auto-name: one Haiku call names the workspace(s) and their agent tabs. naming = "all" or a workspace id while it runs.
@@ -167,7 +173,11 @@ function render(state) {
 
   const boxes = regions.map(r => {
     const box = el("section", "region");
+    box.dataset.group = r.group || "";
     const h = el("h2");
+    h.draggable = true;
+    h.ondragstart = e => { draggingRegion = r; e.dataTransfer.setData("text/plain", r.id); box.classList.add("dragging"); };
+    h.ondragend = () => { draggingRegion = null; box.classList.remove("dragging"); document.querySelectorAll(".drop").forEach(g => g.classList.remove("drop")); };
     const addBtn = el("button", "add", "+"); addBtn.title = "New Claude session in " + r.title;
     addBtn.onclick = () => post("/api/new", { workspace: r.id });
     const name = el("span", "name", r.title);
@@ -187,18 +197,37 @@ function render(state) {
     return box;
   });
 
-  // Masonry: each region goes into the currently shortest column, so rank order still reads left to right, top to bottom.
+  // One section per cmux workspace group (the same groups as the sidebar), then ungrouped. Drag a workspace header onto a section to regroup it.
+  const sections = [...(state.groups || []), { id: "", name: "Ungrouped" }].map(g => {
+    const mine = boxes.filter(b => b.dataset.group === g.id);
+    const sec = el("section", "group");
+    const h = el("h3"); const name = el("span", null, g.name);
+    h.append(name);
+    if (g.id) h.append(pencil(name, g.name, n => post("/api/rename-group", { group: g.id, name: n })));
+    h.append(el("span", "count", mine.length + (mine.length === 1 ? " workspace" : " workspaces")));
+    const cols = el("div", "cols");
+    sec.append(h, cols);
+    sec.ondragover = e => { if (draggingRegion && (draggingRegion.group || "") !== g.id) { e.preventDefault(); sec.classList.add("drop"); } };
+    sec.ondragleave = e => { if (!sec.contains(e.relatedTarget)) sec.classList.remove("drop"); };
+    sec.ondrop = e => { if (!draggingRegion) return; e.preventDefault(); sec.classList.remove("drop"); post("/api/group", { workspace: draggingRegion.id, group: g.id || null }); };
+    return { sec, cols, mine, keep: g.id || mine.length };
+  }).filter(x => x.keep);
+  map.replaceChildren(...sections.map(x => x.sec));
+
+  // Masonry per section: each workspace goes into the currently shortest column, so rank order reads left to right.
   const n = Math.max(1, Math.floor((map.clientWidth - 32 + GAP) / (COL_MIN + GAP)));
-  const cols = Array.from({ length: n }, () => el("div", "col"));
-  map.replaceChildren(...cols);
-  boxes.forEach(box => cols.reduce((a, b) => (b.offsetHeight < a.offsetHeight ? b : a)).append(box));
+  sections.forEach(({ cols, mine }) => {
+    const colEls = Array.from({ length: n }, () => el("div", "col"));
+    cols.replaceChildren(...colEls);
+    mine.forEach(box => colEls.reduce((a, b) => (b.offsetHeight < a.offsetHeight ? b : a)).append(box));
+  });
 }
 
 async function tick() {
   try {
     const state = await (await fetch("/api/state")).json();
     last = state;
-    if (!dragging && !editing) render(last);  // re-rendering mid-drag or mid-rename would drop it
+    if (!dragging && !draggingRegion && !editing) render(last);  // re-rendering mid-drag or mid-rename would drop it
   } catch (e) {
     map.replaceChildren(el("div", "err", "Overworld server not reachable: " + e.message));
   }

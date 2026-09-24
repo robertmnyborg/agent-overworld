@@ -50,3 +50,9 @@ Personal tool. Visual "overworld" of all cmux agent sessions (workspaces = regio
 - Fix (same day): Auto-name all spun, then timed out. The single 22-tab call took 73s and overran the 120s limit, and the page swallowed the error. Cause: headless Claude Code runs Haiku with extended thinking (1.6k-7.8k output tokens for ~11 names). Fix: `MAX_THINKING_TOKENS=0` plus one call per workspace in parallel. All 28 names now take 5.0s total, $0.026. The button shows "renamed N" or "failed", and failures go to the server log.
 - The one-big-batch run also mismatched keys (the visualization tab came out as "Acceptance Criteria"). Per-workspace calls fixed that.
 - Pre-autoname names saved in `~/.overworld/names-original.txt`.
+
+## 2026-09-23 (groups)
+- Uses cmux's native workspace groups (`cmux workspace-group`), which show as collapsible folders in the left sidebar. Created **Work** and **Personal** groups, with idempotency keys `overworld-work` / `overworld-personal`.
+- cmux generates an empty anchor workspace per group (it IS the group header in the sidebar). The map hides generated anchors.
+- Overworld: one section per group in sidebar order, then Ungrouped. Drag a workspace by its header onto a section → `workspace-group add` (`remove` for Ungrouped), via `/api/group`. ✎ on a section header → `workspace-group rename`. Verified: round trip one workspace → Personal → Work. ⌘1 slot unaffected (Overworld stays index 0, pinned).
+- Cost: the page grew from 958px to 1164px at 1480x958, because each group runs its own masonry and Harness (10 sessions) sets the Work section's height.
