@@ -12,7 +12,7 @@ Groups: sections follow cmux's native workspace groups (the sidebar folders). Dr
 Shortcuts: ⌘1 opens the Overworld (it stays pinned in slot 1). ⌘⇧1 goes back to your last tab, via this line in `~/.config/cmux/cmux.json`:
 
 ```jsonc
-"shortcuts": { "bindings": { "focusHistoryBack": "cmd+shift+1" } }
+"shortcuts": { "bindings": { "focusHistoryBack": "cmd+shift+1", "newWorkspaceGroup": "cmd+shift+g", "groupSelectedWorkspaces": "cmd+ctrl+g" } }
 ```
 
 History and design notes live in `CONTEXT.md` and `BUILD-SHEET.md`.
