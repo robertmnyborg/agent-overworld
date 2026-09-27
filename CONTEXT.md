@@ -65,3 +65,8 @@ Personal tool. Visual "overworld" of all cmux agent sessions (workspaces = regio
 - `+` on a group header → `new-workspace --group --command claude`. `+ New group` (header bar) → `workspace-group create`. `×` on a group header, clicked twice → ungroup; the workspaces move to Ungrouped. cmux's `--remove-generated-anchor` only works for anchor-only groups, so for a group with members we ungroup and then `close-workspace` the generated header.
 - Native equivalents in the sidebar: right-click a folder → Rename Group…, Delete Group, Ungroup Workspaces, New Workspace in Group. ⌃⌘G = new empty group, ⌘⇧G = group the selected workspaces. Right-click a workspace → New Group from Workspace / Remove from Group.
 - ⌘⇧G = new empty group, ⌃⌘G = group selected workspaces (swapped from cmux defaults in `cmux.json`). ⌘⇧G is also React Grab's default inside browser panes, including the Overworld.
+
+## 2026-09-27 (columns by height)
+- Problem: columns went to groups by workspace count, so Personal (4 small workspaces) got 3 columns and Work (2 tall workspaces, 16 sessions) got 1, forcing a scroll.
+- Fix in `render()`: measure each workspace box at column width in a hidden probe, start every group at 1 column, then give each spare column to the tallest group that still has more workspaces than columns (height = simulated shortest-column masonry).
+- Verified at 1700x1100 CSS px: Work 2 cols / Personal 2 cols, page 961px = viewport (no scroll). Old rule not re-measured on this data.

@@ -210,8 +210,19 @@ function render(state) {
     .map(g => ({ g, mine: boxes.filter(b => b.dataset.group === g.id) }))
     .filter(x => x.g.id || x.mine.length);
   const total = Math.max(1, Math.floor((map.clientWidth - 32 + GAP) / (COL_MIN + GAP)));
-  const workspaces = all.reduce((n, x) => n + x.mine.length, 0) || 1;
-  all.forEach(x => { x.n = Math.max(1, Math.round(total * x.mine.length / workspaces)); });
+  // Columns go where the height is: measure every workspace at column width, then hand each spare
+  // column to the tallest group that can still split, so the page height (and scrolling) is minimal.
+  const probe = el("div", "col");
+  probe.style.cssText = `position:absolute;visibility:hidden;width:${(map.clientWidth - 32 - (total - 1) * GAP) / total}px`;
+  document.body.append(probe);
+  all.forEach(x => { probe.replaceChildren(...x.mine); x.h = x.mine.map(b => b.offsetHeight); x.n = 1; });
+  probe.remove();
+  const tall = x => Math.max(...x.h.reduce((cols, h) => { cols[cols.indexOf(Math.min(...cols))] += h + GAP; return cols; }, Array(x.n).fill(0)));
+  for (let spare = total - all.length; spare > 0; spare--) {
+    const open = all.filter(x => x.n < x.mine.length);
+    if (!open.length) break;
+    open.reduce((a, b) => (tall(b) > tall(a) ? b : a)).n++;
+  }
   const y = scrollY;  // rebuilding collapses the page for a moment, which would snap the scroll to the top
   map.replaceChildren(...all.map(x => {
     const { g, mine } = x;
