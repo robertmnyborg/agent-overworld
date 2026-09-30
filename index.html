@@ -17,7 +17,11 @@
   .tally b { color: var(--text); }
   .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; vertical-align: middle; }
   label { margin-left: auto; color: var(--muted); cursor: pointer; user-select: none; }
-  main { padding: 6px 16px 40px; display: flex; align-items: stretch; }
+  main { padding: 6px 16px 40px; display: flex; flex-wrap: wrap; align-items: stretch; }
+  /* Scratch: pinned strip above the groups; its sessions flow side by side */
+  .region.scratch { flex: 0 0 100%; margin: 8px 0 14px; display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
+  .region.scratch h2 { grid-column: 1 / -1; cursor: default; }
+  .region.scratch + .group { padding-left: 0; }
   .group { min-width: 0; padding: 0 14px; border-radius: 10px; }
   .group:first-child { padding-left: 0; }
   .group:last-child { padding-right: 0; }
@@ -172,7 +176,7 @@ function render(state) {
     sessions.forEach(t => { if (t.status in counts) counts[t.status]++; });
     const rank = Math.min(...sessions.map(t => ORDER[t.status]), 9);
     return { ...r, sessions, rank };
-  }).filter(r => r.sessions.length).sort((a, b) => a.rank - b.rank);
+  }).filter(r => r.sessions.length || r.scratch).sort((a, b) => a.rank - b.rank);
 
   tally.replaceChildren(...["waiting", "done", "working"].map(k => {
     const s = el("span"); const d = el("span", "dot"); d.style.background = `var(--${k})`;
@@ -180,10 +184,10 @@ function render(state) {
   }));
 
   const boxes = regions.map(r => {
-    const box = el("section", "region");
-    box.dataset.group = r.group || "";
+    const box = el("section", "region" + (r.scratch ? " scratch" : ""));
+    box.dataset.group = r.scratch ? "scratch" : r.group || "";
     const h = el("h2");
-    h.draggable = true;
+    h.draggable = !r.scratch;  // Scratch stays pinned outside the groups
     h.ondragstart = e => { draggingRegion = r; e.dataTransfer.setData("text/plain", r.id); box.classList.add("dragging"); };
     h.ondragend = () => { draggingRegion = null; box.classList.remove("dragging"); document.querySelectorAll(".drop").forEach(g => g.classList.remove("drop")); };
     const addBtn = el("button", "add", "+"); addBtn.title = "New Claude session in " + r.title;
@@ -192,7 +196,9 @@ function render(state) {
     const sparkle = el("span", "pen" + (naming === r.id ? " busy" : ""), naming === r.id ? "naming…" : "✨");
     sparkle.title = "Auto-name this workspace and its sessions";
     sparkle.onclick = e => { e.stopPropagation(); autoname(r.id); };
-    h.append(name, pencil(name, r.title, title => post("/api/rename", { workspace: r.id, title })), sparkle, el("span", "count", r.sessions.length + (r.sessions.length === 1 ? " session" : " sessions")), addBtn);
+    if (r.scratch) h.append(name, el("span", "hint", "one-off sessions · drag one onto a group's drop zone to make it a workspace"));
+    else h.append(name, pencil(name, r.title, title => post("/api/rename", { workspace: r.id, title })), sparkle);
+    h.append(el("span", "count", r.sessions.length + (r.sessions.length === 1 ? " session" : " sessions")), addBtn);
     box.append(h);
     box.ondragover = e => { if (dragging && dragging.workspace !== r.id) { e.preventDefault(); box.classList.add("drop"); } };
     box.ondragleave = e => { if (!box.contains(e.relatedTarget)) box.classList.remove("drop"); };
@@ -258,6 +264,9 @@ function render(state) {
     x.cols = cols;
     return sec;
   }));
+
+  const scratch = boxes.find(b => b.dataset.group === "scratch");
+  if (scratch) map.prepend(scratch);
 
   // Masonry per group: each workspace goes into that group's currently shortest column.
   all.forEach(({ cols, mine, n }) => {

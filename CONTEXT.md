@@ -70,3 +70,15 @@ Personal tool. Visual "overworld" of all cmux agent sessions (workspaces = regio
 - Problem: columns went to groups by workspace count, so Personal (4 small workspaces) got 3 columns and Work (2 tall workspaces, 16 sessions) got 1, forcing a scroll.
 - Fix in `render()`: measure each workspace box at column width in a hidden probe, start every group at 1 column, then give each spare column to the tallest group that still has more workspaces than columns (height = simulated shortest-column masonry).
 - Verified at 1700x1100 CSS px: Work 2 cols / Personal 2 cols, page 961px = viewport (no scroll). Old rule not re-measured on this data.
+
+## 2026-09-29 (trial decision)
+- Decision: KEEP. Robert: "worked". Babysit window closed.
+- herdr cut same day (`brew uninstall herdr`): gutter status duplicated Overworld at single-workspace scale.
+- Kept from the herdr/engineer layout: for dev-server work (Discover :4000/:3001, Studio), use a cmux split with Claude on the right, server logs bottom-left, shell top-left.
+- Kavor uninstalled 2026-09-29 (app + data + prefs). Overworld is the only agent-map tool left.
+
+## 2026-09-29 (Scratch workspace)
+- Purpose: one home for one-off sessions that don't justify their own workspace yet. Once one grows into a work stream, drag it onto a group's drop zone → it becomes its own workspace in that group (existing `/api/split`).
+- `server.py` `ensure_scratch()` runs with the Overworld check every 15s: creates "Scratch" if missing (with a claude tab), removes it from any group, pins it, and holds it at index 1 (⌘2). The existing Scratch was in Personal; it was pulled out and pinned on the first pass.
+- Map: Scratch renders as a full-width strip above the groups, sessions side by side (grid, 320px min). No rename/auto-name/drag on its header, so its title stays "Scratch" (renaming it would make the server create a second one). Auto-name still names its tabs.
+- Verified at 1700x1100: cmux order Overworld(0, pinned), Scratch(1, pinned); strip 117px tall with 2 sessions; Work/Personal still 2+2 columns. Page 977px vs 961px viewport (16px over, from the strip).

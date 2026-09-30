@@ -3,7 +3,8 @@
 
 Reads cmux's own records; writes nothing except ~/.overworld/edges.jsonl (via spinoff.sh).
 Started by autostart.zsh from the first cmux shell (cmux's socket only accepts processes launched inside cmux).
-While cmux is running, keeps a pinned "Overworld" workspace (browser pane on this server) in slot 1 (⌘1).
+While cmux is running, keeps a pinned "Overworld" workspace (browser pane on this server) in slot 1 (⌘1),
+and a pinned, ungrouped "Scratch" workspace in slot 2 for one-off sessions not yet worth their own workspace.
 """
 import json, os, re, subprocess, threading, time
 from concurrent.futures import ThreadPoolExecutor
@@ -38,7 +39,8 @@ WORKING = {"UserPromptSubmit", "PreToolUse", "PostToolUse", "SubagentStop", "Pre
 
 
 CMUX = "/opt/homebrew/bin/cmux"
-ENSURE_EVERY = 15  # seconds between checks that the Overworld workspace exists
+ENSURE_EVERY = 15  # seconds between checks that the Overworld and Scratch workspaces exist
+SCRATCH = "Scratch"
 
 
 def cmux(*args):
@@ -70,6 +72,22 @@ def ensure_workspace():
         cmux("workspace-action", "--workspace", ws["ref"], "--action", "pin")
     if ws["index"] != 0:
         cmux("workspace-action", "--workspace", ws["ref"], "--action", "move-top")
+    ensure_scratch(listing)
+
+
+def ensure_scratch(listing):
+    """Keep a pinned Scratch workspace right under Overworld, outside every group (the map shows it as its own strip)."""
+    ws = next((w for w in listing if w["title"] == SCRATCH), None)
+    if ws is None:
+        cmux("new-workspace", "--name", SCRATCH, "--command", NEW_SESSION_COMMAND, "--focus", "false")
+        return  # pinned and placed on the next pass
+    groups = json.loads(cmux("workspace-group", "list", "--json") or '{"groups": []}')["groups"]
+    if any(ws["ref"] in g["member_workspace_refs"] for g in groups):
+        cmux("workspace-group", "remove", "--workspace", ws["ref"])
+    if not ws["pinned"]:
+        cmux("workspace-action", "--workspace", ws["ref"], "--action", "pin")
+    if ws["index"] != 1:
+        cmux("reorder-workspace", "--workspace", ws["ref"], "--index", "1")
 
 
 def keep_workspace():
@@ -234,7 +252,8 @@ def autoname(workspace=None):
             targets[key] = (r["id"], t["id"])
             tabs.append({"key": key, "current_name": t["title"], "session_title": title, "first_prompt": first, "last_reply": t["recap"]})
         if tabs:
-            targets[f"w{i}"] = (r["id"], None)
+            if not r["scratch"]:  # Scratch keeps its name; only its tabs get named
+                targets[f"w{i}"] = (r["id"], None)
             payloads.append({"key": f"w{i}", "current_name": r["title"], "tabs": tabs})
     with ThreadPoolExecutor(max_workers=8) as pool:
         batches = list(pool.map(name_batch, payloads))
@@ -328,7 +347,8 @@ def state():
                                   "updated": sess["updated"] if sess else None,
                                   "here": sf.get("selected_in_pane") and pane.get("focused") and ws.get("selected")})
             if sessions:
-                regions.append({"id": ws["id"], "title": ws["title"], "group": group_of.get(ws["ref"]), "sessions": sessions})
+                regions.append({"id": ws["id"], "title": ws["title"], "group": group_of.get(ws["ref"]), "sessions": sessions,
+                            "scratch": ws["title"] == SCRATCH})
     return {"regions": regions, "groups": [{"id": g["ref"], "name": g["name"]} for g in groups], "edges": edges, "at": time.time()}
 
 
