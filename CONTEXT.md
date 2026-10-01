@@ -43,7 +43,7 @@ Personal tool. Visual "overworld" of all cmux agent sessions (workspaces = regio
 - 2026-09-23: Robert confirmed ⌘1 → ⌘⇧1 returns to the right tab with a physical keypress.
 
 ## 2026-09-23 (auto-name)
-- ✨ Auto-name all (header), ✨ per workspace header, or the `a` key (when the page has focus) → `/api/autoname`. One headless Haiku call (`claude -p --model haiku`, settings/hooks/MCP/tools off, `--no-session-persistence`, cwd `/tmp` so `~/CLAUDE.md` stays out) with `--json-schema`. Input per tab: Claude Code's `aiTitle`, first real user prompt, last reply. Tabs ≤3 words, workspaces ≤5, truncated in code after the call. Plain shells (no agent) are skipped; exited Claude tabs are named from their transcript.
+- ✨ Auto-name all (header), ✨ per workspace header, or the `a` key (when the page has focus) → `/api/autoname`. One headless Haiku call (`claude -p --model haiku`, settings/hooks/MCP/tools off, `--no-session-persistence`, cwd `/tmp` so `~/CLAUDE.md` stays out) with `--json-schema`. Input per tab: last 5 user prompts + last reply (changed 2026-09-29, see below). Tabs ≤3 words, workspaces ≤5, truncated in code after the call. Plain shells (no agent) are skipped; exited Claude tabs are named from their transcript.
 - Test: Feedback/Notes → "Team Feedback Notes" / "Feedback Patterns", 9.9s, $0.007 (Claude Code's reported cost). Names restored after.
 - Auth: no ANTHROPIC_API_KEY on this Mac; `--bare` fails ("Not logged in") because it skips keychain reads, so the call uses the stripped-settings flags instead.
 - Bug fixed: cmux's `activeSessionsBySurface` dropped this live session, so its tab read "shell". `agent_sessions` now picks per surface from all session records: live pid first, then newest `updatedAt`.
@@ -82,3 +82,13 @@ Personal tool. Visual "overworld" of all cmux agent sessions (workspaces = regio
 - `server.py` `ensure_scratch()` runs with the Overworld check every 15s: creates "Scratch" if missing (with a claude tab), removes it from any group, pins it, and holds it at index 1 (⌘2). The existing Scratch was in Personal; it was pulled out and pinned on the first pass.
 - Map: Scratch renders as a full-width strip above the groups, sessions side by side (grid, 320px min). No rename/auto-name/drag on its header, so its title stays "Scratch" (renaming it would make the server create a second one). Auto-name still names its tabs.
 - Verified at 1700x1100: cmux order Overworld(0, pinned), Scratch(1, pinned); strip 117px tall with 2 sessions; Work/Personal still 2+2 columns. Page 977px vs 961px viewport (16px over, from the strip).
+
+## 2026-09-29 (auto-name tracks recent turns)
+- Problem: Robert: names "don't help me find the last thing that I was working on". Auto-name fed Haiku the session's `aiTitle` and FIRST user prompt, both fixed early, so drifted sessions (AEO Product Strategy) kept their opening topic.
+- Fix: `server.py` `recent_prompts()` replaces `session_brief()`. Input per tab is now the last `RECENT_PROMPTS = 5` real user prompts (read from the last 2MB of the transcript, deduped, tool results and `<`-wrapped hook/command records skipped) plus the last reply. `aiTitle` and first prompt dropped. `NAME_RULES` tells the model to name the latest topic.
+- Verified: autoname on AEO Product Strategy renamed 7 of 9 tabs to match their latest replies (e.g. "Discover Scoring Mechanism" → "Quality Gate Scoring", whose last reply is aeo-quality-gate PR 4; "Acceptance Criteria Writing" → "Peek Attribution Framework"). 1 call, $0.022. Server restarted (pid 19952).
+
+## 2026-10-01 (pull a session out within its group)
+- Robert wanted to drag a tab out of a workspace and drop it in the same group's blank space to make it a new workspace there. `/api/split` already did this, but only through the dashed strip at the top of each group.
+- Fix in `index.html`: the whole group section now accepts a session drop and splits the session into a new workspace in that group (Ungrouped → new ungrouped workspace). Workspace boxes stop session drags from bubbling, so a drop on a workspace still moves the session and a drop on its own workspace does nothing. A lone session already in the group is refused, because splitting it would only recreate its workspace.
+- Verified with synthetic drag events on a throwaway shell tab (OW-TEST): Discover → blank Work space produced a new 1-session workspace in `workspace_group:2`; own-workspace drop sent no request; lone-in-Work refused by Work, accepted by Personal. Test workspace closed after.
