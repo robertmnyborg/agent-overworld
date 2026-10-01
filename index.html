@@ -72,7 +72,7 @@
   <div class="tally" id="tally"></div>
   <button class="add" id="autoAll" title="Name every workspace and session from its conversation (key: a)">✨ Auto-name all</button>
   <button class="add" id="newGroup" title="New empty group">+ New group</button>
-  <span class="hint">drag a session onto another region to move it · a auto-names · ⌘⇧1 back to your last tab</span>
+  <span class="hint">drag a session onto another region to move it, or onto blank group space for its own workspace · a auto-names · ⌘⇧1 back to your last tab</span>
   <label><input type="checkbox" id="showShells"> show plain shells</label>
 </header>
 <main id="map"></main>
@@ -196,13 +196,14 @@ function render(state) {
     const sparkle = el("span", "pen" + (naming === r.id ? " busy" : ""), naming === r.id ? "naming…" : "✨");
     sparkle.title = "Auto-name this workspace and its sessions";
     sparkle.onclick = e => { e.stopPropagation(); autoname(r.id); };
-    if (r.scratch) h.append(name, el("span", "hint", "one-off sessions · drag one onto a group's drop zone to make it a workspace"));
+    if (r.scratch) h.append(name, el("span", "hint", "one-off sessions · drag one into a group to make it a workspace"));
     else h.append(name, pencil(name, r.title, title => post("/api/rename", { workspace: r.id, title })), sparkle);
     h.append(el("span", "count", r.sessions.length + (r.sessions.length === 1 ? " session" : " sessions")), addBtn);
     box.append(h);
-    box.ondragover = e => { if (dragging && dragging.workspace !== r.id) { e.preventDefault(); box.classList.add("drop"); } };
+    // Session drags stop here so the group section underneath doesn't also take them (own region = no-op).
+    box.ondragover = e => { if (!dragging) return; e.stopPropagation(); if (dragging.workspace !== r.id) { e.preventDefault(); box.classList.add("drop"); } };
     box.ondragleave = e => { if (!box.contains(e.relatedTarget)) box.classList.remove("drop"); };
-    box.ondrop = e => { e.preventDefault(); box.classList.remove("drop"); if (dragging) post("/api/move", { workspace: r.id, surface: dragging.id }); };
+    box.ondrop = e => { if (!dragging) return; e.preventDefault(); e.stopPropagation(); if (dragging.workspace === r.id) return; box.classList.remove("drop"); post("/api/move", { workspace: r.id, surface: dragging.id }); };
     const ids = new Set(r.sessions.map(t => t.id));
     const byRank = [...r.sessions].sort((a, b) => ORDER[a.status] - ORDER[b.status] || (Date.parse(b.since || 0) - Date.parse(a.since || 0)));
     const roots = byRank.filter(t => !ids.has(parentOf[t.id]));
@@ -252,15 +253,22 @@ function render(state) {
       h.append(x2);
     }
     const zone = el("div", "newzone", "Drop a session here to give it its own workspace");
-    zone.ondragover = e => { if (dragging) { e.preventDefault(); e.stopPropagation(); zone.classList.add("drop"); } };
+    // A session dropped anywhere in the group outside a workspace (the strip or blank space) becomes its own
+    // workspace in this group. Skip a lone session already in this group: it would just recreate its workspace.
+    const canSplit = () => { const src = last.regions.find(r => r.id === dragging.workspace);
+      return !(src && src.sessions.length === 1 && (src.group || "") === g.id); };
+    const split = () => post("/api/split", { surface: dragging.id, workspace: dragging.workspace, title: dragging.title, group: g.id || null });
+    zone.ondragover = e => { if (dragging && canSplit()) { e.preventDefault(); e.stopPropagation(); zone.classList.add("drop"); } };
     zone.ondragleave = () => zone.classList.remove("drop");
-    zone.ondrop = e => { if (!dragging) return; e.preventDefault(); e.stopPropagation(); zone.classList.remove("drop");
-      post("/api/split", { surface: dragging.id, workspace: dragging.workspace, title: dragging.title, group: g.id || null }); };
+    zone.ondrop = e => { if (!dragging) return; e.preventDefault(); e.stopPropagation(); zone.classList.remove("drop"); sec.classList.remove("drop"); split(); };
     const cols = el("div", "cols");
     sec.append(h, zone, cols);
-    sec.ondragover = e => { if (draggingRegion && (draggingRegion.group || "") !== g.id) { e.preventDefault(); sec.classList.add("drop"); } };
+    sec.ondragover = e => {
+      if ((draggingRegion && (draggingRegion.group || "") !== g.id) || (dragging && canSplit())) { e.preventDefault(); sec.classList.add("drop"); } };
     sec.ondragleave = e => { if (!sec.contains(e.relatedTarget)) sec.classList.remove("drop"); };
-    sec.ondrop = e => { if (!draggingRegion) return; e.preventDefault(); sec.classList.remove("drop"); post("/api/group", { workspace: draggingRegion.id, group: g.id || null }); };
+    sec.ondrop = e => { e.preventDefault(); sec.classList.remove("drop");
+      if (draggingRegion) post("/api/group", { workspace: draggingRegion.id, group: g.id || null });
+      else if (dragging) split(); };
     x.cols = cols;
     return sec;
   }));
