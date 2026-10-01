@@ -22,10 +22,12 @@ CLAUDE = str(Path.home() / ".local" / "bin" / "claude")
 NAMER = [CLAUDE, "-p", "--model", "haiku", "--setting-sources", "", "--no-session-persistence", "--strict-mcp-config",
          "--tools", "", "--disable-slash-commands", "--output-format", "json"]
 NAME_TIMEOUT = 60  # seconds per workspace call
+RECENT_PROMPTS = 5  # user prompts per tab sent to the namer; earlier turns are ignored
 NAME_WORDS = {"t": 3, "w": 5}  # max words for tab (t) and workspace (w) names
 NAME_SCHEMA = {"type": "object", "required": ["names"], "properties": {"names": {"type": "array", "items": {
     "type": "object", "required": ["key", "name"], "properties": {"key": {"type": "string"}, "name": {"type": "string"}}}}}}
-NAME_RULES = """Name cmux workspaces and the Claude Code session tabs inside them, from what each session is about.
+NAME_RULES = """Name cmux workspaces and the Claude Code session tabs inside them, from what each session is working on NOW.
+Each tab gives its most recent user prompts (oldest first) and last reply. Name the latest topic, even if earlier prompts differ.
 Tab names: 2-3 words. Workspace names: 2-5 words covering the tabs inside it. Concrete nouns from the work (project, feature, person, artifact).
 No quotes, no emoji, no trailing punctuation, no generic words like "Session", "Chat", "Claude", or "Work". Title Case.
 Return one entry per key given (every workspace key "w*" and every tab key "t*"). Input:
@@ -205,24 +207,32 @@ def agent_sessions():
     return out
 
 
-def session_brief(transcript):
-    """(Claude Code's own title for the session, first real user prompt) from a transcript."""
+def recent_prompts(transcript, n=RECENT_PROMPTS):
+    """The last n real user prompts from a transcript, oldest first, so names track where the session ended up."""
     path = Path(transcript or "")
     if not path.is_file():
-        return "", ""
-    text = path.read_text(errors="replace")
-    titles = re.findall(r'"aiTitle":"((?:[^"\\]|\\.)*)"', text)
-    first = ""
-    for line in text.splitlines():
-        if '"type":"user"' not in line:
+        return []
+    with open(path, "rb") as f:
+        f.seek(max(0, path.stat().st_size - 2_000_000))
+        lines = f.read().splitlines()
+    prompts = []
+    for raw in reversed(lines):
+        if b'"type":"user"' not in raw:
             continue
-        content = json.loads(line).get("message", {}).get("content")
+        try:
+            content = json.loads(raw).get("message", {}).get("content")
+        except json.JSONDecodeError:
+            continue  # first line of the tail can be cut mid-record
         if isinstance(content, list):
             content = " ".join(c.get("text", "") for c in content if isinstance(c, dict) and c.get("type") == "text")
-        if content and not content.lstrip().startswith("<"):
-            first = plain(content)[:300]
-            break
-    return (json.loads(f'"{titles[-1]}"') if titles else ""), first
+        if content and not content.lstrip().startswith("<"):  # skip tool results, hook and command wrappers
+            text = plain(content)[:300]
+            if text in prompts:
+                continue  # transcripts can log the same prompt twice
+            prompts.append(text)
+            if len(prompts) == n:
+                break
+    return prompts[::-1]
 
 
 def name_batch(workspace_payload):
@@ -247,10 +257,10 @@ def autoname(workspace=None):
         for j, t in enumerate(r["sessions"]):
             if not t["agent"]:
                 continue  # plain shell: nothing to name it from
-            title, first = session_brief(agents.get(t["id"], {}).get("transcript"))
+            prompts = recent_prompts(agents.get(t["id"], {}).get("transcript"))
             key = f"t{i}_{j}"
             targets[key] = (r["id"], t["id"])
-            tabs.append({"key": key, "current_name": t["title"], "session_title": title, "first_prompt": first, "last_reply": t["recap"]})
+            tabs.append({"key": key, "current_name": t["title"], "recent_prompts": prompts, "last_reply": t["recap"]})
         if tabs:
             if not r["scratch"]:  # Scratch keeps its name; only its tabs get named
                 targets[f"w{i}"] = (r["id"], None)
