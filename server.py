@@ -6,7 +6,8 @@ Started by autostart.zsh from the first cmux shell (cmux's socket only accepts p
 While cmux is running, keeps a pinned "Overworld" workspace (browser pane on this server) in slot 1 (⌘1),
 and a pinned, ungrouped "Scratch" workspace in slot 2 for one-off sessions not yet worth their own workspace.
 """
-import json, os, re, subprocess, threading, time
+import hashlib, json, os, re, subprocess, threading, time
+from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -26,10 +27,10 @@ RECENT_PROMPTS = 5  # user prompts per tab sent to the namer; earlier turns are 
 NAME_WORDS = {"t": 3, "w": 5}  # max words for tab (t) and workspace (w) names
 NAME_SCHEMA = {"type": "object", "required": ["names"], "properties": {"names": {"type": "array", "items": {
     "type": "object", "required": ["key", "name"], "properties": {"key": {"type": "string"}, "name": {"type": "string"}}}}}}
-NAME_RULES = """Name cmux workspaces and the Claude Code session tabs inside them, from what each session is working on NOW.
+NAME_RULES = """Name cmux workspaces and the agent session tabs (Claude Code or Antigravity) inside them, from what each session is working on NOW.
 Each tab gives its most recent user prompts (oldest first) and last reply. Name the latest topic, even if earlier prompts differ.
 Tab names: 2-3 words. Workspace names: 2-5 words covering the tabs inside it. Concrete nouns from the work (project, feature, person, artifact).
-No quotes, no emoji, no trailing punctuation, no generic words like "Session", "Chat", "Claude", or "Work". Title Case.
+No quotes, no emoji, no trailing punctuation, no generic words like "Session", "Chat", "Claude", "Gemini", "Argon", "Antigravity", "Agent", or "Work". Title Case.
 Return one entry per key given (every workspace key "w*" and every tab key "t*"). Input:
 """
 
@@ -147,11 +148,49 @@ def plain(text):
     return " ".join(re.sub(r"[*`#>]+", "", text).split())[:240]
 
 
+ASK_CHARS = 120  # about two card lines
+FULL_CHARS = 8000  # tail of the last reply sent for the reply view
+ACTION_EVERY = 20  # seconds between background passes that work out "your turn" actions
+
+
+ASK_CUE = re.compile(r"\b(next step|only you|your call|should i|want me to|shall i|pick|decide|approve|confirm with|let me know|say if|tell me)\b", re.I)
+LIST_LINE = re.compile(r"^\s*([-*\u2022]|\d+[.)])\s")
+
+
+def ask_of(raw):
+    """The part of a reply that asks something of the user, in about two card lines. Text only, no model call:
+    the last question near the end, else the last next-step sentence, else the closing sentences of the last prose paragraph.
+    Links are reduced to their text and "Sources:" / link-list paragraphs are skipped, so a URL's "?" never counts."""
+    text = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", raw)  # [label](url) -> label
+    text = re.sub(r"https?://\S+", "", text)
+    paras = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
+    paras = [p for p in paras if not p.startswith(("|", "```")) and not re.match(r"(sources|references|links)\b", p, re.I)]
+    if not paras:
+        return ""
+    tail = paras[-4:]
+    sentences = lambda p: [x for x in re.split(r"(?<=[.?!])\s+", " ".join(p.split())) if x]
+    for p in reversed(tail):
+        q = [x for x in sentences(p) if x.endswith("?")]
+        if q:
+            return plain(q[-1])
+    for p in reversed(tail):
+        cue = [x for x in sentences(p) if ASK_CUE.search(x)]
+        if cue:
+            return plain(cue[-1])
+    prose = [p for p in tail if not all(LIST_LINE.match(l) or l.rstrip().endswith(":") for l in p.splitlines())]
+    out = ""
+    for x in reversed(sentences((prose or tail)[-1])):  # closing sentences that fit in two lines
+        if out and len(x) + len(out) > ASK_CHARS:
+            break
+        out = (x + " " + out).strip()
+    return plain(out)
+
+
 def last_reply(transcript):
-    """(last assistant text ~240 chars, last user/assistant turn time, its role) from a Claude transcript."""
+    """(last assistant text ~240 chars, last user/assistant turn time, its role, full text of that reply) from a Claude transcript."""
     path = Path(transcript or "")
     if not path.is_file():
-        return "", None, None
+        return "", None, None, ""
     mtime = path.stat().st_mtime
     hit = _recap_cache.get(path)
     if hit and hit[0] == mtime:
@@ -159,7 +198,7 @@ def last_reply(transcript):
     with open(path, "rb") as f:
         f.seek(max(0, path.stat().st_size - 400_000))
         lines = f.read().splitlines()
-    text, turn_at, turn_role = "", None, None
+    text, turn_at, turn_role, full = "", None, None, ""
     for raw in reversed(lines):
         if b'"assistant"' not in raw and b'"user"' not in raw:
             continue
@@ -175,10 +214,196 @@ def last_reply(transcript):
             continue
         parts = [c.get("text", "") for c in e.get("message", {}).get("content", []) if isinstance(c, dict) and c.get("type") == "text"]
         if any(p.strip() for p in parts):
-            text = plain(" ".join(parts))
+            full = "\n\n".join(p.strip() for p in parts if p.strip())
+            text = plain(full)
             break
-    _recap_cache[path] = (mtime, (text, turn_at, turn_role))
-    return text, turn_at, turn_role
+    _recap_cache[path] = (mtime, (text, turn_at, turn_role, full))
+    return text, turn_at, turn_role, full
+
+
+LANE_WINDOW = 30 * 60  # seconds a finished subagent stays in its session's lane
+LANE_MAX = 6  # rows per lane; running agents first
+STALE_AFTER = 15 * 60  # an unfinished subagent silent this long was stopped or killed
+_lane_cache = {}  # subagent transcript -> (mtime, row)
+
+
+def subagent_row(path):
+    """One subagent transcript -> {type, label, status, detail, started, ended}. Status: running / done / stopped."""
+    mtime = path.stat().st_mtime
+    hit = _lane_cache.get(path)
+    if hit and hit[0] == mtime:
+        return hit[1]
+    meta = load_json(path.with_suffix(".meta.json"))
+    with open(path, "rb") as f:
+        started = json.loads(f.readline()).get("timestamp")
+        f.seek(max(0, path.stat().st_size - 200_000))
+        lines = f.read().splitlines()
+    last = None
+    for raw in reversed(lines):
+        if b'"type":"assistant"' in raw:
+            try:
+                last = json.loads(raw)
+                break
+            except json.JSONDecodeError:
+                continue  # first line of the tail can be cut mid-record
+    msg = (last or {}).get("message", {})
+    content = [c for c in msg.get("content", []) if isinstance(c, dict)]
+    texts = [c["text"] for c in content if c.get("type") == "text" and c.get("text", "").strip()]
+    tool = next((c for c in reversed(content) if c.get("type") == "tool_use"), None)
+    if msg.get("stop_reason") == "end_turn" and not tool:
+        status, detail = "done", plain(" ".join(texts))
+    else:
+        status = "stopped" if time.time() - mtime > STALE_AFTER else "running"
+        arg = next((str(v) for v in (tool or {}).get("input", {}).values() if isinstance(v, str)), "")
+        detail = plain(f"{tool['name']}: {arg}") if tool else plain(" ".join(texts))
+    row = {"type": meta.get("agentType") or "agent", "label": meta.get("description") or path.stem,
+           "status": status, "detail": detail[:160], "started": started, "ended": (last or {}).get("timestamp"), "mtime": mtime}
+    _lane_cache[path] = (mtime, row)
+    return row
+
+
+def subagents(transcript):
+    """Subagents spawned by one Claude session: running ones, then those finished in the last LANE_WINDOW, newest first."""
+    if not transcript:
+        return [], 0
+    folder = Path(transcript).with_suffix("") / "subagents"
+    if not folder.is_dir():
+        return [], 0
+    rows = [subagent_row(p) for p in folder.glob("agent-*.jsonl")]
+    rows = [r for r in rows if r["status"] == "running" or time.time() - r["mtime"] < LANE_WINDOW]
+    rows.sort(key=lambda r: (r["status"] != "running", -r["mtime"]))
+    return rows[:LANE_MAX], max(0, len(rows) - LANE_MAX)
+
+
+TIMELINE_TAIL = 4_000_000  # bytes of the main transcript read for the current turn
+_turn_cache = {}  # transcript -> (mtime, records)
+
+
+def _epoch(iso):
+    return datetime.fromisoformat(iso.replace("Z", "+00:00")).timestamp()
+
+
+def _records(path, tail=None):
+    """user/assistant records of a transcript (optionally only its last `tail` bytes), oldest first."""
+    with open(path, "rb") as f:
+        if tail:
+            f.seek(max(0, path.stat().st_size - tail))
+        lines = f.read().splitlines()
+    out = []
+    for raw in lines:
+        if b'"timestamp"' not in raw:
+            continue
+        try:
+            e = json.loads(raw)
+        except json.JSONDecodeError:
+            continue  # first line of a tail can be cut mid-record
+        if e.get("type") in ("user", "assistant") and e.get("timestamp"):
+            out.append(e)
+    return out
+
+
+def _blocks(e):
+    c = e.get("message", {}).get("content")
+    return [b for b in c if isinstance(b, dict)] if isinstance(c, list) else []
+
+
+def _user_text(e):
+    """Text of a user record that is not a tool result ('' for tool results)."""
+    c = e.get("message", {}).get("content")
+    if isinstance(c, str):
+        return c
+    return "" if any(b.get("type") == "tool_result" for b in _blocks(e)) else " ".join(b.get("text", "") for b in _blocks(e) if b.get("type") == "text")
+
+
+def _is_prompt(e):
+    text = _user_text(e).lstrip()
+    return (e["type"] == "user" and not e.get("isMeta") and not e.get("isCompactSummary")
+            and bool(text) and not text.startswith("<task-notification"))
+
+
+def _tool_label(b):
+    inp = b.get("input") or {}
+    arg = inp.get("description") if b.get("name") == "Agent" else next((v for v in inp.values() if isinstance(v, str)), "")
+    return plain(f"{b.get('name')}: {arg}")[:100]
+
+
+def segments(records, now, main):
+    """Records -> [{kind, start, end, label, open}]. kind: model (generating), tool (a call until its result),
+    you (main lane: reply sent, next prompt not yet), agents (main lane: waiting on a background notification)."""
+    segs, tools, prev = [], {}, None
+    for e in records:
+        t = _epoch(e["timestamp"])
+        if e["type"] == "assistant":
+            if prev:
+                segs.append({"kind": "model", "start": _epoch(prev["timestamp"]), "end": t, "label": "model generating"})
+            for b in _blocks(e):
+                if b.get("type") == "tool_use":
+                    tools[b.get("id")] = (t, _tool_label(b))
+        else:
+            for b in _blocks(e):
+                if b.get("type") == "tool_result" and b.get("tool_use_id") in tools:
+                    start, label = tools.pop(b["tool_use_id"])
+                    segs.append({"kind": "tool", "start": start, "end": t, "label": label})
+            if main and prev and prev["type"] == "assistant" and _user_text(e):
+                kind = "you" if _is_prompt(e) else "agents"
+                segs.append({"kind": kind, "start": _epoch(prev["timestamp"]), "end": t,
+                             "label": "waiting on you" if kind == "you" else "waiting on background agents"})
+        prev = e
+    for start, label in tools.values():  # calls still running
+        segs.append({"kind": "tool", "start": start, "end": now, "label": label, "open": True})
+    if prev and not tools:
+        tail_start = _epoch(prev["timestamp"])
+        if prev["type"] == "user":
+            segs.append({"kind": "model", "start": tail_start, "end": now, "label": "model generating", "open": True})
+        elif main and prev.get("message", {}).get("stop_reason") == "end_turn":
+            segs.append({"kind": "you", "start": tail_start, "end": now, "label": "waiting on you", "open": True})
+    merged = []  # back-to-back model slices read as one bar
+    for s in sorted(segs, key=lambda s: s["start"]):
+        m = merged[-1] if merged else None
+        if m and s["kind"] == "model" == m["kind"] and s["start"] - m["end"] < 1:
+            m["end"], m["open"] = max(m["end"], s["end"]), s.get("open", m.get("open"))
+        else:
+            merged.append(s)
+    return merged
+
+
+def timeline(surface):
+    """The current turn of one session (last prompt -> now): main lane + one lane per subagent, plus totals."""
+    sess = agent_sessions().get(surface) or {}
+    path = Path(sess.get("transcript") or "")
+    if not path.is_file():
+        return {"error": "no Claude transcript for this tab"}
+    mtime, now = path.stat().st_mtime, time.time()
+    hit = _turn_cache.get(path)
+    records = hit[1] if hit and hit[0] == mtime else _records(path, TIMELINE_TAIL)
+    _turn_cache[path] = (mtime, records)
+    turn = max((i for i, e in enumerate(records) if _is_prompt(e)), default=0)
+    records = records[turn:]
+    start = _epoch(records[0]["timestamp"]) if records else now
+    lanes = [{"name": "main", "type": "session", "status": None, "segments": segments(records, now, True)}]
+    folder = path.with_suffix("") / "subagents"
+    for p in sorted(folder.glob("agent-*.jsonl")) if folder.is_dir() else []:
+        if p.stat().st_mtime < start:
+            continue
+        row = subagent_row(p)
+        segs = [s for s in segments(_records(p), now, False) if s["end"] >= start]
+        if row["status"] != "running":
+            segs = [{**s, "open": False} for s in segs]
+            if row["status"] == "stopped":
+                segs = [{**s, "end": min(s["end"], row["mtime"])} for s in segs]
+        lanes.append({"name": row["label"], "type": row["type"], "status": row["status"], "segments": segs})
+    tail = lanes[0]["segments"][-1] if lanes[0]["segments"] else None
+    if tail and tail.get("open") and tail["kind"] == "you" and any(l["status"] == "running" for l in lanes[1:]):
+        tail.update(kind="agents", label="waiting on background agents")  # reply sent, but its agents are still working
+    totals = {}
+    for s in lanes[0]["segments"]:
+        totals[s["kind"]] = totals.get(s["kind"], 0) + s["end"] - max(s["start"], start)
+    slowest = sorted(({"lane": l["name"], **s} for l in lanes for s in l["segments"] if s["kind"] in ("tool", "model")),
+                     key=lambda s: s["start"] - s["end"])[:3]
+    # The axis ends where activity ends: a trailing "waiting on you" stretch can be hours and would flatten every bar.
+    busy = [s["end"] for l in lanes for s in l["segments"] if s["kind"] != "you"]
+    return {"start": start, "now": now, "active_end": max(busy, default=now), "prompt": plain(_user_text(records[0]))[:140] if records else "",
+            "lanes": lanes, "totals": totals, "slowest": slowest}
 
 
 def agent_sessions():
@@ -194,17 +419,65 @@ def agent_sessions():
         if surface and (surface not in best or rank > best[surface][0]):
             best[surface] = (rank, s)
     for surface, (_, s) in best.items():
-        text, turn_at, turn_role = last_reply(s.get("transcriptPath"))
+        text, turn_at, turn_role, full = last_reply(s.get("transcriptPath"))
         out[surface] = {"agent": "claude", "lifecycle": s.get("agentLifecycle"), "recap": text or s.get("lastBody") or "",
+                        "full": full[-FULL_CHARS:], "ask": ask_of(full),
                         "cwd": s.get("cwd"), "updated": s.get("updatedAt"), "pid": s.get("pid"),
                         "turn_at": turn_at, "turn_role": turn_role, "transcript": s.get("transcriptPath")}
     agy = load_json(CMUXTERM / "antigravity-hook-sessions.json").get("sessions", {})
     for s in agy.values():
         cur = out.get(s["surfaceId"])
         if cur is None or (s.get("updatedAt") or 0) > (cur.get("updated") or 0):
-            out[s["surfaceId"]] = {"agent": "agy", "lifecycle": s.get("agentLifecycle"), "recap": "",
-                                   "cwd": s.get("cwd"), "updated": s.get("updatedAt"), "pid": s.get("pid")}
+            prompts, text, turn_at, turn_role = agy_turns(s.get("transcriptPath"))
+            out[s["surfaceId"]] = {"agent": "agy", "lifecycle": s.get("agentLifecycle"), "recap": text,
+                                   "cwd": s.get("cwd"), "updated": s.get("updatedAt"), "pid": s.get("pid"),
+                                   "turn_at": turn_at, "turn_role": turn_role, "prompts": prompts}
     return out
+
+
+_agy_cache = {}  # agy transcript path -> (mtime, (prompts, last reply, last turn time, its role))
+
+
+def agy_turns(transcript, n=RECENT_PROMPTS):
+    """(last n user prompts, last reply ~240 chars, last turn time, its role) from an Antigravity transcript_full.jsonl.
+    Prompts are USER_INPUT records (text inside <USER_REQUEST>); replies are PLANNER_RESPONSE records with text."""
+    path = Path(transcript or "")
+    if not path.is_file():
+        return [], "", None, None
+    mtime = path.stat().st_mtime
+    hit = _agy_cache.get(path)
+    if hit and hit[0] == mtime:
+        return hit[1]
+    with open(path, "rb") as f:
+        f.seek(max(0, path.stat().st_size - 2_000_000))
+        lines = f.read().splitlines()
+    prompts, text, turn_at, turn_role = [], "", None, None
+    for raw in reversed(lines):
+        if b'"USER_INPUT"' not in raw and b'"PLANNER_RESPONSE"' not in raw:
+            continue
+        try:
+            e = json.loads(raw)
+        except json.JSONDecodeError:
+            continue  # first line of the tail can be cut mid-record
+        content = e.get("content") or ""
+        if e.get("type") == "USER_INPUT":
+            m = re.search(r"<USER_REQUEST>(.*?)</USER_REQUEST>", content, re.S)
+            prompt = plain(m.group(1) if m else content)[:300]
+            if prompt and prompt not in prompts and len(prompts) < n:
+                prompts.append(prompt)
+            role = "user"
+        elif e.get("type") == "PLANNER_RESPONSE" and content.strip():
+            text = text or plain(content)
+            role = "assistant"
+        else:
+            continue  # a tool-call-only planner step is not a turn
+        if turn_at is None:
+            turn_at, turn_role = e.get("created_at"), role
+        if text and len(prompts) == n:
+            break
+    result = (prompts[::-1], text, turn_at, turn_role)
+    _agy_cache[path] = (mtime, result)
+    return result
 
 
 def recent_prompts(transcript, n=RECENT_PROMPTS):
@@ -246,6 +519,77 @@ def name_batch(workspace_payload):
     return result["structured_output"]["names"], result.get("total_cost_usd") or 0
 
 
+ACTIONS = Path.home() / ".overworld" / "actions.json"  # sha1 of a reply -> what it needs from the user; survives restarts
+ACTION_SCHEMA = {"type": "object", "required": ["kind", "action", "options"], "properties": {
+    "kind": {"type": "string", "enum": ["decision", "action", "none"]},
+    "action": {"type": "string"},
+    "options": {"type": "array", "items": {"type": "string"}}}}
+ACTION_RULES = """A coding agent finished a turn and is waiting for its user. From the user's last prompt and the agent's reply,
+say what the user must do or decide so the work moves to the next step.
+- kind "decision": the reply asks the user to choose or approve something. action = the question, one sentence, max 20 words,
+  naming what is being decided. options = the choices as short labels (2-6 words each, at most 5), in the reply's order; [] for yes/no.
+- kind "action": the user must do something themselves (ask a person, run a command, review a draft, grant access).
+  action = that step as an imperative sentence, max 20 words, naming who/what. options = [].
+- kind "none": the reply asks nothing and needs nothing. action = "Nothing needed. Suggested next: " + the most useful
+  next instruction the user could give, max 15 words. options = [].
+Plain words, no markdown, no quotes, no emoji. Use names and numbers from the reply. Input:
+"""
+_actions = {"cache": None, "lock": threading.Lock(), "busy": set()}
+
+
+def _action_cache():
+    if _actions["cache"] is None:
+        _actions["cache"] = json.loads(ACTIONS.read_text()) if ACTIONS.exists() else {}
+    return _actions["cache"]
+
+
+def action_key(full):
+    return hashlib.sha1(full.encode()).hexdigest()
+
+
+def cached_action(full):
+    return _action_cache().get(action_key(full)) if full else None
+
+
+def work_out_action(full, prompt):
+    """One headless Haiku call: what this reply needs from the user. Cached by reply text, so each reply costs one call."""
+    key = action_key(full)
+    with _actions["lock"]:
+        if key in _action_cache() or key in _actions["busy"]:
+            return _action_cache().get(key)
+        _actions["busy"].add(key)
+    try:
+        payload = {"user_last_prompt": prompt, "agent_reply": full[-FULL_CHARS:]}
+        out = subprocess.run([*NAMER, "--json-schema", json.dumps(ACTION_SCHEMA)], input=ACTION_RULES + json.dumps(payload, indent=1),
+                             capture_output=True, text=True, timeout=NAME_TIMEOUT, cwd="/tmp",
+                             env={**os.environ, "MAX_THINKING_TOKENS": "0"})
+        result = json.loads(out.stdout)
+        if result.get("is_error"):
+            raise RuntimeError(result.get("result", "action call failed"))
+        row = {**result["structured_output"], "cost": result.get("total_cost_usd") or 0}
+        with _actions["lock"]:
+            _action_cache()[key] = row
+            ACTIONS.write_text(json.dumps(_action_cache()))
+        print(f"{time.strftime('%H:%M:%S')} action: {row['kind']} | {row['action'][:80]} | ${row['cost']:.4f}", flush=True)
+        return row
+    finally:
+        _actions["busy"].discard(key)
+
+
+def keep_actions():
+    """Background: work out the action for every "your turn" session whose last reply has none yet, one call at a time."""
+    while True:
+        try:
+            agents = agent_sessions()
+            for r in state()["regions"]:
+                for t in r["sessions"]:
+                    if t["status"] == "waiting" and t["full"] and not cached_action(t["full"]):
+                        work_out_action(t["full"], (recent_prompts((agents.get(t["id"]) or {}).get("transcript"), 1) or [""])[-1])
+        except (subprocess.SubprocessError, json.JSONDecodeError, KeyError, RuntimeError, OSError) as e:
+            print(f"{time.strftime('%H:%M:%S')} keep_actions failed: {e!r}"[:400], flush=True)
+        time.sleep(ACTION_EVERY)
+
+
 def autoname(workspace=None):
     """Name workspaces (all, or one) and their agent tabs from session content, one Haiku call per workspace in parallel."""
     agents = agent_sessions()
@@ -257,7 +601,8 @@ def autoname(workspace=None):
         for j, t in enumerate(r["sessions"]):
             if not t["agent"]:
                 continue  # plain shell: nothing to name it from
-            prompts = recent_prompts(agents.get(t["id"], {}).get("transcript"))
+            sess = agents.get(t["id"], {})
+            prompts = sess.get("prompts") or recent_prompts(sess.get("transcript"))  # agy sessions carry their prompts
             key = f"t{i}_{j}"
             targets[key] = (r["id"], t["id"])
             tabs.append({"key": key, "current_name": t["title"], "recent_prompts": prompts, "last_reply": t["recap"]})
@@ -347,11 +692,14 @@ def state():
                         recap = screen_recap(sf["id"], ws["id"])
                     event = events.get(sf["id"])
                     since = event[1] if event else None
+                    lane, more = subagents(sess.get("transcript")) if sess else ([], 0)
                     if event and event[0] == "SessionStart" and sess and sess.get("turn_at"):
                         since = sess["turn_at"]  # a relaunch restarts every session; age from the last real turn
                     sessions.append({"id": sf["id"], "title": sf["title"], "workspace": ws["id"],
                                   "status": status(sess, unread.get(sf["id"]), event),
-                                  "since": since, "recap": recap,
+                                  "since": since, "recap": recap, "ask": sess.get("ask", "") if sess else "",
+                                  "full": sess.get("full", "") if sess else "",
+                                  "action": cached_action(sess.get("full", "")) if sess else None, "subagents": lane, "subagents_more": more,
                                   "agent": sess["agent"] if sess else None,
                                   "cwd": sess["cwd"] if sess else None,
                                   "updated": sess["updated"] if sess else None,
@@ -374,6 +722,20 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/api/state":
             self._send(200, state())
+        elif self.path.startswith("/api/action?surface="):
+            # On demand, for the reply view on a session the background pass skips (not "your turn").
+            surface = self.path.split("=", 1)[1]
+            sess = agent_sessions().get(surface)
+            if not sess or not sess.get("full"):
+                return self._send(404, {"error": "no reply to read"})
+            try:
+                prompt = (recent_prompts(sess.get("transcript"), 1) or [""])[-1]
+                return self._send(200, cached_action(sess["full"]) or work_out_action(sess["full"], prompt) or {"pending": True})
+            except (subprocess.SubprocessError, json.JSONDecodeError, KeyError, RuntimeError) as e:
+                print(f"{time.strftime('%H:%M:%S')} action failed: {e!r}"[:400], flush=True)
+                return self._send(502, {"error": repr(e)[:300]})
+        elif self.path.startswith("/api/timeline?surface="):
+            self._send(200, timeline(self.path.split("=", 1)[1]))
         elif self.path in ("/", "/index.html"):
             self._send(200, (HERE / "index.html").read_bytes(), "text/html; charset=utf-8")
         else:
@@ -427,6 +789,14 @@ class Handler(BaseHTTPRequestHandler):
                     cmux("close-workspace", "--workspace", g["anchor_workspace_ref"])
         elif self.path == "/api/rename-group":
             cmux("workspace-group", "rename", body["group"], "--name", body["name"])
+        elif self.path == "/api/send":
+            # Bracketed paste + Enter, so multi-line text arrives as one message. Errors go back to the page.
+            out = subprocess.run([CMUX, "paste", "--workspace", body["workspace"], "--surface", body["surface"], "--submit", "-"],
+                                 input=body["text"], capture_output=True, text=True, timeout=10,
+                                 env={**os.environ, "CMUX_QUIET": "1"})
+            if out.returncode:
+                print(f"{time.strftime('%H:%M:%S')} send failed: {out.stderr.strip()[:300]}", flush=True)
+                return self._send(502, {"error": out.stderr.strip()[:300] or f"cmux exited {out.returncode}"})
         elif self.path == "/api/close":
             cmux("close-surface", "--surface", body["surface"], "--workspace", body["workspace"])
         else:
@@ -442,4 +812,5 @@ if __name__ == "__main__":
     PIDFILE.write_text(str(os.getpid()))
     print(f"Overworld on http://127.0.0.1:{PORT} (pid {os.getpid()})", flush=True)
     threading.Thread(target=keep_workspace, daemon=True).start()
+    threading.Thread(target=keep_actions, daemon=True).start()
     httpd.serve_forever()

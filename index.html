@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Agent Overworld</title>
 <style>
-  :root {
+  :root { color-scheme: dark;
     --bg: #12131a; --panel: #1b1d27; --line: #2a2d3b; --text: #e6e7ee; --muted: #8a8ea3;
-    --waiting: #f5a524; --working: #4c8dff; --done: #3ecf8e; --idle: #5b6075; --shell: #34374a;
+    --waiting: #f5a524; --working: #4c8dff; --done: #3ecf8e; --idle: #5b6075; --shell: #34374a; --tool: #b48cff; --danger: #ff6b6b; --scrim: rgba(0,0,0,.55);
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text); font: 13px/1.4 -apple-system, "SF Pro Text", system-ui, sans-serif; }
@@ -52,7 +52,7 @@
   .pen.busy { visibility: visible; font-size: 11px; }
   .rename { flex: 1; min-width: 0; background: var(--bg); color: var(--text); border: 1px solid var(--working); border-radius: 4px; font: inherit; font-weight: 600; padding: 1px 5px; }
   .x:hover { color: var(--text); }
-  .x.armed { color: #ff6b6b; font-weight: 600; }
+  .x.armed { color: var(--danger); font-weight: 600; }
   .hint { color: var(--muted); font-size: 11px; }
   .session:last-child { border-bottom: 0; }
   .session:hover { background: #232635; }
@@ -62,6 +62,96 @@
   .session .meta { color: var(--muted); font-size: 11px; white-space: nowrap; }
   .session .recap { color: var(--muted); margin-top: 3px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   .session.here { background: #20243a; }
+  /* Subagent lane: the agents a session spawned, one row each */
+  .lane { margin: 6px 0 0 2px; border-left: 1px solid var(--line); padding-left: 8px; display: flex; flex-direction: column; gap: 3px; }
+  .sub { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .sub .row { gap: 6px; }
+  .sub .what { color: var(--text); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sub .detail { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-left: 14px; }
+  .sub.running .dot { background: var(--working); animation: pulse 1.4s ease-in-out infinite; }
+  .sub.done .dot { background: var(--done); }
+  .sub.stopped .dot { background: var(--idle); }
+  .sub.done .what, .sub.stopped .what { color: var(--muted); }
+  @keyframes pulse { 50% { opacity: .35; } }
+  .lane { cursor: zoom-in; }
+  /* Timeline drawer: one session's current turn, a bar per model stretch / tool call / wait, a row per agent */
+  #tl { position: fixed; top: 0; right: 0; bottom: 0; width: min(960px, 72vw); background: var(--panel); border-left: 1px solid var(--line);
+        z-index: 5; overflow-y: auto; padding: 14px 18px 30px; box-shadow: -12px 0 30px rgba(0,0,0,.35); font-variant-numeric: tabular-nums; }
+  #tl[hidden] { display: none; }
+  .tl-head { display: flex; gap: 10px; align-items: baseline; }
+  .tl-head b { font-size: 15px; flex: 1; }
+  .tl-head .x { visibility: visible; cursor: pointer; font-size: 16px; }
+  .tl-prompt { color: var(--muted); margin: 4px 0 10px; }
+  .tl-sum { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-bottom: 8px; }
+  .tl-sum .k { color: var(--muted); }
+  .tl-slow { margin: 0 0 14px; padding: 0; list-style: none; }
+  .tl-slow li { display: flex; gap: 8px; padding: 2px 0; }
+  .tl-slow .d { width: 52px; text-align: right; font-weight: 600; }
+  .tl-slow .l { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tl-slow .w { color: var(--muted); white-space: nowrap; max-width: 40%; overflow: hidden; text-overflow: ellipsis; }
+  .tl-grid { display: grid; grid-template-columns: 200px 1fr; row-gap: 6px; align-items: center; }
+  .tl-name { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 10px; }
+  .tl-name b { color: var(--text); font-weight: 600; }
+  .tl-track { position: relative; height: 16px; background: var(--bg); border-radius: 3px; }
+  .tl-axis { position: relative; height: 16px; font-size: 10px; color: var(--muted); }
+  .tl-axis span { position: absolute; transform: translateX(-50%); }
+  .tl-axis span:first-child { transform: none; }
+  .seg { position: absolute; top: 2px; bottom: 2px; min-width: 2px; border-radius: 2px; }
+  .seg.model { background: var(--working); }
+  .seg.tool { background: var(--tool); top: 0; bottom: 0; }
+  .seg.you { background: var(--waiting); opacity: .55; }
+  .seg.agents { background: repeating-linear-gradient(135deg, var(--idle) 0 4px, transparent 4px 8px); }
+  .seg.open { animation: pulse 1.4s ease-in-out infinite; }
+  .tl-legend { display: flex; gap: 14px; margin-top: 14px; color: var(--muted); font-size: 11px; }
+  .tl-legend i { display: inline-block; width: 18px; height: 8px; border-radius: 2px; margin-right: 5px; vertical-align: middle; }
+  .session .recap.ask { color: var(--text); }
+  /* Reply view: one session blown up over the dimmed map */
+  #peek { position: fixed; inset: 0; z-index: 7; background: var(--scrim); display: flex; align-items: center; justify-content: center; padding: 24px 16px; }
+  .peek-panel { width: min(760px, 100%); max-height: 100%; display: flex; flex-direction: column; gap: 10px; background: var(--panel);
+                border: 1px solid var(--line); border-left: 3px solid var(--c); border-radius: 10px; padding: 14px 16px; }
+  .peek-panel .row { display: flex; gap: 8px; align-items: baseline; }
+  .peek-panel .title { font-size: 15px; flex: 1; }
+  .peek-panel .meta { color: var(--muted); font-size: 11px; }
+  .peek-panel { width: min(980px, 100%); }
+  .md td.short { white-space: nowrap; }
+  .peek-ask { background: var(--bg); border: 1px solid var(--line); border-left: 3px solid var(--waiting); border-radius: 6px; padding: 10px 12px;
+              font-size: 15px; font-weight: 600; line-height: 1.45; }
+  .peek-ask.quiet { border-left-color: var(--idle); font-weight: 500; }
+  .peek-ask.quiet .k { color: var(--muted); }
+  .peek-ask .pending { color: var(--muted); font-weight: 400; }
+  .peek-ask .opts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .peek-ask .opt { border: 1px solid var(--line); border-radius: 5px; padding: 2px 8px; font-size: 13px; font-weight: 500; }
+  .peek-ask .k { display: block; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--waiting); margin-bottom: 3px; }
+  .peek-msg { overflow-y: auto; max-height: 58vh; padding-right: 8px; font-size: 14px; line-height: 1.6; }
+  .md > * { margin: 0 0 12px; }
+  .md > :last-child { margin-bottom: 0; }
+  .md h4 { font-size: 14px; margin-top: 18px; }
+  .md ul, .md ol { padding-left: 20px; }
+  .md li { margin: 4px 0; }
+  .md li.sub { margin-left: 18px; list-style-type: circle; }
+  .md strong { color: var(--text); font-weight: 650; }
+  .md code { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; font: 12px ui-monospace, Menlo, monospace; }
+  .md pre { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; overflow-x: auto; font: 12px/1.5 ui-monospace, Menlo, monospace; }
+  .md blockquote { border-left: 3px solid var(--line); padding-left: 12px; color: var(--muted); }
+  .md a { color: var(--working); }
+  .md .tbl { overflow-x: auto; border: 1px solid var(--line); border-radius: 6px; }
+  .md table { border-collapse: collapse; width: 100%; font-size: 13px; font-variant-numeric: tabular-nums; }
+  .md th { background: var(--bg); text-align: left; font-weight: 600; white-space: nowrap; }
+  .md th, .md td { padding: 6px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .md tr:last-child td { border-bottom: 0; }
+  .peek-panel textarea { width: 100%; resize: vertical; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 4px;
+                         padding: 6px 8px; font: inherit; }
+  .peek-panel textarea:focus { outline: none; border-color: var(--working); }
+  .peek-panel .hint.fail, .broadcast .hint.fail { color: var(--danger); }
+  /* Keyboard: highlighted card, ticked cards, and the bottom bar that messages every ticked session */
+  .session.sel { outline: 1px solid var(--text); outline-offset: -1px; }
+  .session.ticked .title::before { content: "✓ "; color: var(--done); }
+  .broadcast { position: fixed; left: 16px; right: 16px; bottom: 16px; z-index: 6; background: var(--panel); border: 1px solid var(--working);
+               border-radius: 10px; padding: 10px 12px; }
+  .broadcast textarea { width: 100%; resize: vertical; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 4px;
+                        padding: 5px 7px; font: inherit; }
+  .broadcast textarea:focus { outline: none; border-color: var(--working); }
+  .broadcast .hint { margin-top: 4px; }
   .shell .title { color: var(--muted); font-weight: 400; }
   .err { padding: 16px; color: var(--waiting); }
 </style>
@@ -72,10 +162,11 @@
   <div class="tally" id="tally"></div>
   <button class="add" id="autoAll" title="Name every workspace and session from its conversation (key: a)">✨ Auto-name all</button>
   <button class="add" id="newGroup" title="New empty group">+ New group</button>
-  <span class="hint">drag a session onto another region to move it, or onto blank group space for its own workspace · a auto-names · ⌘⇧1 back to your last tab</span>
+  <span class="hint">drag a session onto another region to move it, or onto blank group space for its own workspace · keys: arrows move · r reply (to all ticked, if any) · Space tick · Enter open · Esc clear · a auto-name · ⌘⇧1 back</span>
   <label><input type="checkbox" id="showShells"> show plain shells</label>
 </header>
 <main id="map"></main>
+<aside id="tl" hidden></aside>
 <script>
 const ORDER = { waiting: 0, done: 1, working: 2, idle: 3, shell: 4 };
 const LABEL = { waiting: "your turn", done: "finished", working: "working", idle: "idle", shell: "shell" };
@@ -130,6 +221,223 @@ function pencil(label, current, save) {
   };
   return pen;
 }
+// Keyboard: arrows move the highlight to the nearest card in that direction, r replies (to every ticked card if any
+// are ticked, else to the highlighted one), Enter opens the tab, Space ticks. sel and ticked hold session ids so they
+// survive the 3s re-render.
+let sel = null;
+const ticked = new Set(), sent = new Set();  // sent: replied to in this pass, so "next your turn" skips them until Esc
+const cards = () => [...document.querySelectorAll(".session")];
+const sessionById = id => last && last.regions.flatMap(r => r.sessions).find(t => t.id === id);
+function select(id) {
+  sel = id;
+  cards().forEach(c => c.classList.toggle("sel", c.dataset.id === id));
+  const c = cards().find(c => c.dataset.id === id);
+  if (c) c.scrollIntoView({ block: "nearest", inline: "nearest" });
+}
+// Nearest card in a direction, by screen position. Cards that line up with the current one (overlap on the other
+// axis) win; among the rest, distance on the other axis counts 3x so a move stays in its row or column.
+const DIRS = { ArrowRight: [1, 0], ArrowLeft: [-1, 0], ArrowDown: [0, 1], ArrowUp: [0, -1] };
+function neighbor(from, [dx, dy]) {
+  const a = from.getBoundingClientRect();
+  let best = null, bestScore = Infinity;
+  for (const c of cards()) {
+    if (c === from) continue;
+    const b = c.getBoundingClientRect();
+    const ahead = dx ? (dx > 0 ? b.left - a.right : a.left - b.right) : (dy > 0 ? b.top - a.bottom : a.top - b.bottom);
+    if (ahead < -2) continue;  // behind or beside, not in this direction
+    const side = dx ? Math.max(0, b.top - a.bottom, a.top - b.bottom) : Math.max(0, b.left - a.right, a.left - b.right);
+    const score = Math.max(0, ahead) + side * 3;
+    if (score < bestScore) { bestScore = score; best = c; }
+  }
+  return best;
+}
+// Next "your turn" card after `from` in map order (wrapping), skipping sessions already answered in this pass.
+function nextWaiting(from) {
+  const list = cards().filter(c => c.classList.contains("waiting") && !sent.has(c.dataset.id));
+  if (!list.length) return null;
+  const all = cards(), at = all.findIndex(c => c.dataset.id === from);
+  return (list.find(c => all.indexOf(c) > at) || list[0]).dataset.id;
+}
+const typing = e => e.metaKey || e.ctrlKey || e.altKey || editing || ["INPUT", "TEXTAREA"].includes(e.target.tagName);
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape" && !editing) { sel = null; ticked.clear(); sent.clear(); render(last); return; }
+  if (typing(e)) return;
+  if (DIRS[e.key]) {
+    e.preventDefault();
+    const cur = cards().find(c => c.dataset.id === sel);
+    const next = cur ? neighbor(cur, DIRS[e.key]) : cards()[0];
+    if (next) select(next.dataset.id);
+  }
+  else if (e.key === "r") {
+    e.preventDefault();
+    if (ticked.size) return openBroadcast();
+    const id = sel || nextWaiting(null);
+    if (id) { select(id); openReply(id); }
+  }
+  else if (e.key === "Enter" && sel) { const t = sessionById(sel); if (t) fetch("/api/focus", { method: "POST", body: JSON.stringify({ workspace: t.workspace, surface: t.id }) }); }
+  else if (e.key === " " && sel) { e.preventDefault(); ticked.has(sel) ? ticked.delete(sel) : ticked.add(sel); render(last); }
+});
+
+async function sendTo(t, text) {
+  const res = await fetch("/api/send", { method: "POST", body: JSON.stringify({ workspace: t.workspace, surface: t.id, text }) });
+  if (res.ok) return null;
+  return (await res.json().catch(() => ({ error: `HTTP ${res.status}` }))).error;
+}
+
+// Markdown -> DOM for the reply view: headings, paragraphs, lists, tables, code, quotes; inline bold, italics, code, links.
+// Builds elements with textContent only, so nothing in a reply can inject markup.
+function inline(text) {
+  const frag = document.createDocumentFragment();
+  const re = /(`[^`]+`)|(\*\*[^*]+\*\*)|(\[[^\]]+\]\([^)\s]+\))|(https?:\/\/[^\s)]+)|(\*[^*\s][^*]*\*)/g;
+  let at = 0, m;
+  while ((m = re.exec(text))) {
+    if (m.index > at) frag.append(text.slice(at, m.index));
+    const [tok] = m;
+    if (m[1]) frag.append(el("code", null, tok.slice(1, -1)));
+    else if (m[2]) { const b = el("strong"); b.append(inline(tok.slice(2, -2))); frag.append(b); }
+    else if (m[3]) { const [, label, href] = tok.match(/^\[([^\]]+)\]\(([^)]+)\)$/); const l = el("a", null, label); l.href = href; l.target = "_blank"; frag.append(l); }
+    else if (m[4]) { const l = el("a", null, tok); l.href = tok; l.target = "_blank"; frag.append(l); }
+    else frag.append(el("em", null, tok.slice(1, -1)));
+    at = m.index + tok.length;
+  }
+  if (at < text.length) frag.append(text.slice(at));
+  return frag;
+}
+const cells = line => line.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map(c => c.trim());
+const LIST = /^(\s*)([-*\u2022]|\d+[.)])\s+(.*)$/;
+function markdown(src) {
+  const out = el("div", "md"), lines = src.replace(/\r/g, "").split("\n");
+  let i = 0, para = [];
+  const flush = () => { if (para.length) { const p = el("p"); p.append(inline(para.join(" "))); out.append(p); para = []; } };
+  while (i < lines.length) {
+    const line = lines[i];
+    if (!line.trim()) { flush(); i++; continue; }
+    if (/^\s*```/.test(line)) {
+      flush(); const code = []; i++;
+      while (i < lines.length && !/^\s*```/.test(lines[i])) code.push(lines[i++]);
+      i++; out.append(el("pre", null, code.join("\n"))); continue;
+    }
+    if (/^\s*\|/.test(line) && /^\s*\|?\s*:?-{2,}/.test(lines[i + 1] || "")) {
+      flush(); const wrap = el("div", "tbl"), table = el("table"), head = el("tr");
+      cells(line).forEach(c => { const th = el("th"); th.append(inline(c)); head.append(th); });
+      table.append(head); i += 2;
+      while (i < lines.length && /^\s*\|/.test(lines[i])) {
+        const tr = el("tr"); cells(lines[i++]).forEach(c => { const td = el("td", c.length <= 28 ? "short" : null); td.append(inline(c)); tr.append(td); }); table.append(tr);
+      }
+      wrap.append(table); out.append(wrap); continue;
+    }
+    const h = line.match(/^(#{1,6})\s+(.*)$/);
+    if (h) { flush(); const e = el("h4"); e.append(inline(h[2])); out.append(e); i++; continue; }
+    if (/^\s*>/.test(line)) {
+      flush(); const q = el("blockquote"), body = [];
+      while (i < lines.length && /^\s*>/.test(lines[i])) body.push(lines[i++].replace(/^\s*>\s?/, ""));
+      q.append(inline(body.join(" "))); out.append(q); continue;
+    }
+    if (LIST.test(line)) {
+      flush(); const ordered = /\d/.test(line.match(LIST)[2]), list = el(ordered ? "ol" : "ul");
+      while (i < lines.length && (LIST.test(lines[i]) || (/^\s{2,}\S/.test(lines[i]) && list.lastChild))) {
+        const m = lines[i].match(LIST);
+        if (m) { const li = el("li"); if (m[1].length >= 2) li.className = "sub"; li.append(inline(m[3])); list.append(li); }
+        else list.lastChild.append(" ", inline(lines[i].trim()));  // wrapped continuation of the previous item
+        i++;
+      }
+      out.append(list); continue;
+    }
+    para.push(line.trim()); i++;
+  }
+  flush();
+  return out;
+}
+
+// Reply view ("force press"): the session blown up in the middle of the screen, map dimmed. Its full last message,
+// scrolled to the end where the ask usually is, then the reply box. Enter sends; on a "your turn" session it then swaps
+// in the next one. Tab skips to the next "your turn" session, Shift+Enter is a new line, Esc or a click outside closes.
+// Renders pause while it is open.
+function openReply(id) {
+  const t = sessionById(id), card = cards().find(c => c.dataset.id === id);
+  if (!t || !card || !t.agent) return;
+  document.getElementById("peek")?.remove();
+  editing = true;
+  const left = cards().filter(c => c.classList.contains("waiting") && !sent.has(c.dataset.id)).length;
+  const inbox = card.classList.contains("waiting");
+  const back = el("div"), panel = el("div", "peek-panel"), head = el("div", "row"), msg = el("div", "peek-msg");
+  msg.append(t.full ? markdown(t.full) : el("p", null, t.recap || "(no reply yet)"));
+  back.id = "peek";
+  head.append(el("b", "title", t.title), el("span", "meta", [LABEL[t.status], ago(t.since), t.agent].filter(Boolean).join(" · ")));
+  const input = el("textarea");
+  const hint = el("div", "hint", (inbox ? "Enter send + next · Tab skip" : "Enter send") + " · Shift+Enter new line · Esc close" + (inbox ? ` · ${left} waiting` : ""));
+  input.rows = 3; input.placeholder = `Reply to ${t.title}`;
+  panel.style.setProperty("--c", `var(--${t.status})`);
+  panel.append(head);
+  // What the session needs from you comes first, so the full message below reads as context for it.
+  // The action comes first, so the full message below reads as context for it. Worked out by the server (one Haiku call
+  // per reply, cached); "your turn" sessions have it already, others fetch it now and fill in.
+  const callout = el("div", "peek-ask");
+  const fill = a => {
+    const label = { decision: "Your decision", action: "Your action", none: "Nothing needed" }[a.kind] || "Your action";
+    callout.classList.toggle("quiet", a.kind === "none");
+    callout.replaceChildren(el("span", "k", label), el("div", null, a.action));
+    if (a.options && a.options.length) { const ol = el("div", "opts"); a.options.forEach(o => ol.append(el("span", "opt", o))); callout.append(ol); }
+  };
+  if (t.action) fill(t.action);
+  else if (t.full) {
+    callout.replaceChildren(el("span", "k", "Working out the action…"), el("div", "pending", t.ask || ""));
+    fetch("/api/action?surface=" + encodeURIComponent(t.id)).then(r => r.json()).then(a => {
+      if (!callout.isConnected) return;
+      if (a.action) fill(a); else callout.replaceChildren(el("span", "k", "Couldn't work out the action"), el("div", "pending", a.error || t.ask || ""));
+    });
+  }
+  if (t.full) panel.append(callout);
+  panel.append(msg, input, hint);
+  back.append(panel);
+  const close = () => { back.remove(); editing = false; render(last); };
+  const advance = () => { const next = nextWaiting(id); if (next && next !== id) { select(next); openReply(next); } else close(); };
+  back.onmousedown = e => { if (e.target === back) { sent.clear(); close(); } };
+  input.onkeydown = async e => {
+    e.stopPropagation();
+    if (e.key === "Escape") { sent.clear(); return close(); }
+    if (e.key === "Tab" && inbox) { e.preventDefault(); sent.add(id); return advance(); }  // skipped counts as handled for this pass
+    if (e.key !== "Enter" || e.shiftKey) return;
+    e.preventDefault();
+    const text = input.value.trim();
+    if (!text) return;
+    input.disabled = true; hint.textContent = "sending…";
+    const err = await sendTo(t, text);
+    if (err) { input.disabled = false; hint.textContent = "not sent: " + err; hint.classList.add("fail"); input.focus(); return; }
+    sent.add(id);
+    if (inbox) advance(); else { close(); setTimeout(tick, 600); }
+  };
+  document.body.append(back);
+  input.focus();
+}
+
+// r with cards ticked: one message to every ticked session, sent in parallel. Failures are listed by name and those sessions stay ticked.
+function openBroadcast() {
+  const targets = [...ticked].map(sessionById).filter(t => t && t.agent);
+  if (!targets.length) return;
+  editing = true;
+  const bar = el("div", "broadcast"), input = el("textarea");
+  const hint = el("div", "hint", `To ${targets.length}: ${targets.map(t => t.title).join(", ")} · Enter sends · Esc cancels`);
+  input.rows = 2; input.placeholder = `Message all ${targets.length} ticked sessions`;
+  const close = () => { bar.remove(); editing = false; render(last); };
+  input.onkeydown = async e => {
+    e.stopPropagation();
+    if (e.key === "Escape") return close();
+    if (e.key !== "Enter" || e.shiftKey) return;
+    e.preventDefault();
+    const text = input.value.trim();
+    if (!text) return;
+    input.disabled = true; hint.textContent = `sending to ${targets.length}…`;
+    const errs = await Promise.all(targets.map(t => sendTo(t, text)));
+    const failed = targets.filter((t, i) => errs[i]);
+    targets.forEach((t, i) => { if (!errs[i]) ticked.delete(t.id); });
+    if (!failed.length) { close(); setTimeout(tick, 600); return; }
+    input.disabled = false; hint.classList.add("fail");
+    hint.textContent = `not sent to ${failed.map(t => `${t.title} (${errs[targets.indexOf(t)]})`).join(", ")}; they stay ticked`;
+  };
+  bar.append(input, hint);
+  document.body.append(bar); input.focus();
+}
 const COL_MIN = 340, GAP = 14;
 const post = (path, body) => fetch(path, { method: "POST", body: JSON.stringify(body || {}) }).then(() => setTimeout(tick, 600));
 addEventListener("resize", () => render(last));
@@ -143,7 +451,8 @@ function ago(iso) {
 function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
 
 function sessionEl(t, isChild) {
-  const b = el("div", "session " + t.status + (isChild ? " child" : "") + (t.here ? " here" : ""));
+  const b = el("div", "session " + t.status + (isChild ? " child" : "") + (t.here ? " here" : "") + (sel === t.id ? " sel" : "") + (ticked.has(t.id) ? " ticked" : ""));
+  b.dataset.id = t.id;
   b.draggable = true;
   b.ondragstart = e => { dragging = t; e.dataTransfer.setData("text/plain", t.id); b.classList.add("dragging"); document.body.classList.add("dragging-session"); };
   b.ondragend = () => { dragging = null; b.classList.remove("dragging"); document.body.classList.remove("dragging-session"); document.querySelectorAll(".drop").forEach(r => r.classList.remove("drop")); };
@@ -151,7 +460,10 @@ function sessionEl(t, isChild) {
   const row = el("div", "row");
   const label = el("span", "title", (isChild ? "↳ " : "") + t.title);
   row.append(label);
-  row.append(el("span", "meta", [LABEL[t.status], ago(t.since), t.agent].filter(Boolean).join(" · ")));
+  // "your turn" wins even while background agents run: the session still needs an action from you.
+  const bg = t.subagents.filter(a => a.status === "running").length;
+  const statusText = LABEL[t.status] + (t.status === "waiting" && bg ? ` (${bg} agent${bg > 1 ? "s" : ""} still running)` : "");
+  row.append(el("span", "meta", [statusText, ago(t.since), t.agent].filter(Boolean).join(" · ")));
   const x = el("span", "x" + (armed === t.id ? " armed" : ""), armed === t.id ? "close?" : "×");
   x.title = "Close this session (click twice)";
   x.onclick = e => {
@@ -160,20 +472,116 @@ function sessionEl(t, isChild) {
     else { armed = t.id; setTimeout(() => { if (armed === t.id) { armed = null; render(last); } }, 3000); }
     render(last);
   };
-  row.append(pencil(label, t.title, title => post("/api/rename", { workspace: t.workspace, surface: t.id, title })), x);
+  row.append(pencil(label, t.title, title => post("/api/rename", { workspace: t.workspace, surface: t.id, title })));
+  if (t.agent === "claude") {
+    const clock = el("span", "pen", "⏱"); clock.title = "Why is this taking so long? (timeline of the current turn)";
+    clock.onclick = e => { e.stopPropagation(); openTimeline(t); };
+    row.append(clock);
+  }
+  if (t.agent) {
+    const reply = el("span", "pen", "↩"); reply.title = "Send this session a message without leaving the map (key: r)";
+    reply.onclick = e => { e.stopPropagation(); select(t.id); openReply(t.id); };
+    row.append(reply);
+  }
+  row.append(x);
   b.append(row);
-  if (t.recap) b.append(el("div", "recap", t.recap));
+  // "your turn": show what the session is asking for (picked server-side from the end of its reply), not its opening line.
+  const ask = t.status === "waiting" && ((t.action && t.action.action) || t.ask);
+  if (ask || t.recap) { const r = el("div", "recap" + (ask ? " ask" : ""), ask || t.recap); r.title = "r to read the full message and reply"; b.append(r); }
+  if (t.subagents.length) { const lane = laneEl(t); lane.onclick = e => { e.stopPropagation(); openTimeline(t); }; b.append(lane); }
   b.onclick = () => fetch("/api/focus", { method: "POST", body: JSON.stringify({ workspace: t.workspace, surface: t.id }) });
   return b;
 }
+
+function span(a, b) { return dur((Date.parse(b) - Date.parse(a)) / 1000); }
+function dur(s) {
+  s = Math.max(0, s);
+  return s < 60 ? Math.round(s) + "s" : s < 3600 ? Math.floor(s / 60) + "m" + String(Math.round(s % 60)).padStart(2, "0") : s < 172800 ? (s / 3600).toFixed(1) + "h" : (s / 86400).toFixed(1) + "d";
+}
+
+function laneEl(t) {
+  const lane = el("div", "lane");
+  t.subagents.forEach(a => {
+    const row = el("div", "sub " + a.status), top = el("div", "row");
+    const end = a.status === "running" ? new Date().toISOString() : a.ended;
+    top.append(el("span", "dot"), el("span", "what", `${a.type} · ${a.label}`),
+               el("span", null, [a.status, span(a.started, end)].join(" · ")));
+    row.append(top);
+    if (a.detail) row.append(el("div", "detail", a.detail));
+    row.title = a.detail;
+    lane.append(row);
+  });
+  if (t.subagents_more) lane.append(el("div", "sub", `+${t.subagents_more} more`));
+  return lane;
+}
+
+// Timeline drawer. Refetches every 3s while open; the map re-renders underneath without touching it.
+const tl = document.getElementById("tl");
+let tlSession = null;
+const KIND = { model: "model generating", tool: "tool call", agents: "waiting on background agents", you: "waiting on you" };
+function openTimeline(t) { tlSession = t; tl.hidden = false; tl.replaceChildren(el("div", "tl-prompt", "loading…")); loadTimeline(); }
+function closeTimeline() { tlSession = null; tl.hidden = true; }
+document.addEventListener("keydown", e => { if (e.key === "Escape" && tlSession) closeTimeline(); });
+async function loadTimeline() {
+  if (!tlSession) return;
+  const t = tlSession, d = await (await fetch("/api/timeline?surface=" + encodeURIComponent(t.id))).json();
+  if (tlSession !== t) return;
+  const head = el("div", "tl-head"), x = el("span", "x", "×");
+  x.onclick = closeTimeline;
+  head.append(el("b", null, t.title), el("span", "hint", "current turn · Esc closes"), x);
+  if (d.error) { tl.replaceChildren(head, el("div", "tl-prompt", d.error)); return; }
+  const end = Math.max(d.active_end, d.start + 5), width = end - d.start;
+  const tail = d.lanes[0].segments.find(s => s.kind === "you" && s.open);
+  const sum = el("div", "tl-sum");
+  const kv = (k, v) => { const s = el("span"); s.append(el("span", "k", k + " "), el("b", null, v)); sum.append(s); };
+  kv("turn", dur((tail ? tail.start : d.now) - d.start));
+  ["model", "tool", "agents"].forEach(k => { if (d.totals[k] >= 1) kv(KIND[k], dur(d.totals[k])); });
+  const youDone = (d.totals.you || 0) - (tail ? d.now - tail.start : 0);
+  if (youDone >= 1) kv("waited on you mid-turn", dur(youDone));
+  if (tail) kv("your turn for", dur(d.now - tail.start));
+  const slow = el("ol", "tl-slow");
+  d.slowest.forEach(s => {
+    const li = el("li");
+    li.append(el("span", "d", dur(s.end - s.start)), el("span", "l", (s.open ? "▶ " : "") + s.label), el("span", "w", s.lane));
+    slow.append(li);
+  });
+  const grid = el("div", "tl-grid"), axis = el("div", "tl-axis");
+  for (let i = 0; i <= 4; i++) { const tick = el("span", null, i ? "+" + dur(width * i / 4) : "prompt"); tick.style.left = (i * 25) + "%"; if (i === 4) tick.style.transform = "translateX(-100%)"; axis.append(tick); }
+  grid.append(el("div"), axis);
+  d.lanes.forEach(l => {
+    const name = el("div", "tl-name");
+    name.append(el("b", null, l.name === "main" ? "main session" : l.type), " " + (l.name === "main" ? "" : l.name) + (l.status ? " · " + l.status : ""));
+    name.title = l.name;
+    const track = el("div", "tl-track");
+    l.segments.forEach(s => {
+      const a = Math.max(s.start, d.start), b = Math.min(s.end, end);
+      if (b <= a) return;
+      const seg = el("div", "seg " + s.kind + (s.open && s.end <= end + 1 ? " open" : ""));
+      seg.style.left = ((a - d.start) / width * 100) + "%";
+      seg.style.width = ((b - a) / width * 100) + "%";
+      seg.title = `${s.label} · ${dur(s.end - s.start)}${s.open ? " (running)" : ""}`;
+      track.append(seg);
+    });
+    grid.append(name, track);
+  });
+  const legend = el("div", "tl-legend");
+  Object.entries(KIND).forEach(([k, label]) => { const s = el("span"), i = el("i", "seg " + k); i.style.position = "static"; s.append(i, label); legend.append(s); });
+  const parts = [head, el("div", "tl-prompt", "“" + d.prompt + "”"), sum];
+  if (d.slowest.length) parts.push(el("div", "hint", "slowest steps"), slow);
+  parts.push(grid, legend);
+  if (tail && tail.start < d.now - width) parts.push(el("div", "hint", `axis stops at the last activity; your-turn time (${dur(d.now - tail.start)}) is not drawn to scale`));
+  tl.replaceChildren(...parts);
+}
+setInterval(loadTimeline, 3000);
 
 function render(state) {
   if (!state) return;
   const parentOf = Object.fromEntries(state.edges.map(e => [e.child, e.parent]));
   const counts = { waiting: 0, done: 0, working: 0 };
+  let subRunning = 0;
   const regions = state.regions.map(r => {
     const sessions = r.sessions.filter(t => showShells.checked || t.status !== "shell");
-    sessions.forEach(t => { if (t.status in counts) counts[t.status]++; });
+    sessions.forEach(t => { if (t.status in counts) counts[t.status]++; subRunning += t.subagents.filter(a => a.status === "running").length; });
     const rank = Math.min(...sessions.map(t => ORDER[t.status]), 9);
     return { ...r, sessions, rank };
   }).filter(r => r.sessions.length || r.scratch).sort((a, b) => a.rank - b.rank);
@@ -182,6 +590,7 @@ function render(state) {
     const s = el("span"); const d = el("span", "dot"); d.style.background = `var(--${k})`;
     s.append(d, el("b", null, counts[k]), " " + LABEL[k]); return s;
   }));
+  if (subRunning) { const s = el("span"); s.append(el("b", null, subRunning), " subagents running"); tally.append(s); }
 
   const boxes = regions.map(r => {
     const box = el("section", "region" + (r.scratch ? " scratch" : ""));
