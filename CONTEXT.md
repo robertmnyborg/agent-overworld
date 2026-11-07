@@ -92,3 +92,66 @@ Personal tool. Visual "overworld" of all cmux agent sessions (workspaces = regio
 - Robert wanted to drag a tab out of a workspace and drop it in the same group's blank space to make it a new workspace there. `/api/split` already did this, but only through the dashed strip at the top of each group.
 - Fix in `index.html`: the whole group section now accepts a session drop and splits the session into a new workspace in that group (Ungrouped → new ungrouped workspace). Workspace boxes stop session drags from bubbling, so a drop on a workspace still moves the session and a drop on its own workspace does nothing. A lone session already in the group is refused, because splitting it would only recreate its workspace.
 - Verified with synthetic drag events on a throwaway shell tab (OW-TEST): Discover → blank Work space produced a new 1-session workspace in `workspace_group:2`; own-workspace drop sent no request; lone-in-Work refused by Work, accepted by Personal. Test workspace closed after.
+
+## 2026-10-14 (subagent lane)
+- Origin: compared a "Session Board" zip (Muse-built, self-reported JSONL event log → SQLite board of agents per session). Kept only its idea, a per-session lane of agents. Its pipeline, goal hierarchy and Muse shim duplicate what cmux + Overworld already do.
+- Source: `<transcript stem>/subagents/agent-<id>.jsonl` + `.meta.json` (`agentType`, `description`). cmux's `SubagentStop` events carry no agent id (`extra_fields` redacted), so they can't be used.
+- Status: last assistant record `stop_reason == end_turn` with no tool_use → done (detail = final text). Otherwise running (detail = current tool + first string arg), or stopped once silent for 15 min (`STALE_AFTER`).
+- Lane shows running agents, plus agents that finished in the last 30 min (`LANE_WINDOW`). Max 6 rows (`LANE_MAX`), then "+N more". Header tally adds "N subagents running". Cached per file mtime.
+- Verified: a Haiku Explore agent spawned from Scratch / Session Board Overworld showed as `running · Bash: ls -la …`, then as `done · 5s` with its final text, in /api/state and in the rendered page.
+- Not covered: Workflow tool runs (only the subagents they spawn appear). The town status ignores background agents, so a session can show "your turn" while its agents still run.
+- 2026-10-17: Robert's call on the status gap: a session waiting on him stays "your turn" even while its background agents run. The meta line now adds "(N agents still running)" so both facts show.
+
+## 2026-10-17 (turn timeline: "why is this taking so long")
+- Robert asks this almost daily. ⏱ on any Claude session row (hover), or a click on its subagent lane, opens a right-hand drawer for the current turn (last real prompt → now). It refreshes every 3s; Esc closes it.
+- Drawer contents: turn length, a breakdown (model generating / tool calls / waiting on background agents / waiting on you), the 3 slowest steps with their lane, then a swimlane with one row for the main session and one per subagent. Hover a bar for its label and duration.
+- `/api/timeline?surface=<uuid>` → `timeline()` in server.py. Segments come from the transcript: model = previous record → assistant record (back-to-back slices merged), tool = tool_use → matching tool_result by id, you = reply → next real prompt, agents = reply → `<task-notification` record. Open calls run to now.
+- Prompt detection skips `isMeta`, `isCompactSummary` and task notifications. A reply left open while subagents still run counts as "waiting on background agents", not "your turn".
+- The axis ends at the last activity, so a multi-day your-turn tail is reported in the summary instead of drawn. Example: Labs Revenue Mission shows a 59s turn plus "your turn for 5.8d".
+- Verified live: Local Harness Eval, turn 12m21, one Bash call (oracle check) took 10m01. Black Book Visibility, 3 forks drawn side by side, its main lane hatched while waiting on them (1m39).
+
+## 2026-10-21 (auto-name reads Antigravity sessions)
+- Bug: auto-name named every agy tab "Gemini Argon Agent". `agent_sessions()` kept no transcript for agy, so the namer got zero prompts, and the recap fell back to `read-screen`, whose last lines are agy's model footer ("Gemini 4 Argon").
+- Fix: `agy_turns()` reads cmux's agy `transcriptPath` (`~/.gemini/antigravity-cli/brain/<id>/.system_generated/logs/transcript_full.jsonl`). Prompts = `USER_INPUT` records (text inside `<USER_REQUEST>`), reply = last `PLANNER_RESPONSE` with text. agy sessions now carry `prompts`, `recap`, `turn_at`, `turn_role`. `NAME_RULES` covers Antigravity tabs and bans Gemini/Argon/Antigravity/Agent.
+- Verified: workspace "Gemini Argon Agent" → "Cobot Corp Podcast Transcripts", tab → "YouTube Transcript Pull" (1 call, $0.0003). agy recaps on the map now show the last reply instead of the footer. Timeline (⏱) still covers Claude only.
+
+## 2026-11-06 (message a session from the map)
+- Idea taken from AIOffice (github.com/ChristianFJung/AIOffice): talk to an agent without opening its tab. Rest of AIOffice skipped: it runs its own agents outside cmux, so it can't see these sessions.
+- ↩ on any agent session opens a box under the card. Enter sends, Shift+Enter = new line, Esc cancels. Renders pause while it is open (same `editing` flag as rename).
+- `/api/send` → `cmux paste --submit -` (text on stdin): a bracketed paste plus Enter, so multi-line text arrives as one message. cmux errors return 502 and show in red under the box ("not sent: …") and in the server log.
+- Verified on a throwaway Haiku session: a 1-line and a 2-line message, via curl and via the page. Both arrived as one message and got answers. Bad surface id → 502 "Terminal surface not found". Test tab closed.
+- Found while cleaning up (not fixed): cmux's `close-surface` now refuses a tab with a running process ("confirmation_required … retry with force=true"); `--force` works. Overworld's × close (`/api/close`) passes no `--force`, so it likely fails silently on live sessions. Not tested from the page. Robert: won't fix, he only closes tabs once their tasks are finished.
+
+## 2026-11-06 (keyboard: reply inbox, move, tick, message several)
+- Keys (page must have focus; ignored while typing in a box): r = reply (highlighted card, else the first "your turn" card in map order); j/k or ↓/↑ = move highlight; Enter = open that tab; Space = tick; b = one message to every ticked session; Esc = clear highlight, ticks and the pass.
+- Reply box on a "your turn" card: Enter sends and jumps to the next "your turn" card (map order, wrapping), Tab skips, Esc ends the pass. Cards answered or skipped are remembered for the pass (`sent`) because the map's status only changes once the hook fires. On any other card, Enter sends and closes.
+- b opens a bar at the bottom naming the targets. Sends go out in parallel; failures are named in red and stay ticked, successes are unticked.
+- Highlight and ticks are kept by session id, so they survive the 3s re-render.
+- Verified in the automation Chrome with two throwaway Haiku sessions: the page saw only those two as "your turn", and sends to any other session were blocked in the page for the test. r → INBOX-A, box moved itself to the second card → INBOX-B, pass ended; j/k moved; Space ticked both; b → BROADCAST reached both (read back from each tab); Enter fired focus for the highlighted card; Esc cleared. Test tabs closed.
+- Not verified: real keypresses inside cmux after ⌘1. Plain letter keys worked before (`a`), but only once the page has keyboard focus.
+
+## 2026-11-06 (keys simplified, per Robert)
+- One key per job. r is the only reply key: with cards ticked it opens the bottom bar to message all of them, otherwise the box on the highlighted card (or the first "your turn" card). b removed.
+- Arrows move by screen position: the nearest card in that direction, preferring cards that line up with the current one (distance on the other axis weighted 3x). Left/right cross columns and groups. j/k removed (two ways to move would conflict).
+- Verified in the automation Chrome with sends blocked: Right ×3 along the Scratch row, Down into Personal, Left across into Work, Up within a column; r with nothing ticked → box on the highlighted card; Space on 2 cards then r → bar addressed to both; Esc cleared. No sends fired.
+
+## 2026-11-06 (show the ask; reply view)
+- Problem: cards showed the first ~2 lines of the last reply, but the question or next step sits at the end, so "your turn" cards hid the thing you need to answer.
+- Server: `last_reply` also returns the full reply. Sessions carry `full` (last 8,000 chars) and `ask`. `ask_of()` is text-only, no model call: links reduced to their text, URLs dropped (a URL's "?" never counts), "Sources:" paragraphs skipped; then the last question in the last 4 paragraphs, else the last next-step sentence (`ASK_CUE`: next step, only you, should I, want me to, pick, decide, …), else the closing sentences of the last prose paragraph (~120 chars).
+- Checked on the 8 live "your turn" sessions: 5 show the real ask ("Which option, A, B or C?", "Should I push the branch…?", "Next step only you can take: ask Austin…"); the other 3 replies ask nothing, so their cards show the closing line. "choose" was dropped from the cues after it matched "want to choose by December".
+- Page: "your turn" cards show the ask in brighter text. r / ↩ opens the reply view: the session blown up over the dimmed map, full last message scrolled to the end, reply box focused. Enter sends (+ next on your-turn), Tab skips, Esc or click outside closes. Replaces the inline box under the card.
+- /api/state grew to ~110 KB per 3s poll (local only).
+- Verified in the automation Chrome with sends blocked: view opened on Apollo Mobile Fix scrolled to its question, Tab moved to the next your-turn session (7 waiting), Esc closed, no sends fired.
+
+## 2026-11-06 (reply view: rendered markdown, ask first)
+- Reply view renders the message as markdown (`markdown()` + `inline()` in index.html: headings, paragraphs, lists incl. wrapped/indented items, tables, code fences, quotes, bold/italic/code/links). Builds DOM with textContent only, no innerHTML, so reply text can't inject markup. Tables scroll sideways; cells ≤28 chars don't wrap.
+- The ask is pinned at the top in a callout ("Needs from you" on your-turn sessions, "Where it left off" otherwise); the message starts at the top below it. 14px text, 1.6 line height, 980px panel.
+- Verified on Sequence Pilot Reps (the screenshot Robert flagged): 8-row table rendered as a table, 3 lists, no raw "|" lines, callout "Next step: confirm the two names with Tim before Monday's call with Nooks."
+
+## 2026-11-06 (the action, worked out by Haiku)
+- Robert: the view needs a clear "what is the action / decision", not where it left off. Picking text out of the reply can't state an action when the reply never says one outright, so this is a model call.
+- `work_out_action(full, prompt)`: one headless Haiku call (same flags as auto-name, thinking off) with `ACTION_SCHEMA` → `{kind: decision|action|none, action, options}`. Input = the user's last prompt + the reply. Cached by sha1 of the reply in `~/.overworld/actions.json`, so each reply costs one call, once.
+- `keep_actions` thread: every 20s, works out the action for every "your turn" session with none cached. `/api/action?surface=` does it on demand for other sessions when the reply view opens (shows "Working out the action…" until it lands, ~5s).
+- Cards: "your turn" cards show the action (fallback: the text-picked `ask`). Reply view callout: "Your decision" + option chips / "Your action" / "Nothing needed" (grey, with a suggested next instruction).
+- First run: 8 your-turn sessions, $0.0051 total, ~4s each. Examples: "Choose how Austin's roundup guidance enters the Discover sales scorecard…" with chips A/B/C; "Ask Austin to add you as an admin or billing viewer on Apollo, LeadMagic and BetterContact"; "Approve pushing fix/mobile-and-direct and opening it as a stacked PR on top of #14?". On demand: Sequence Pilot Reps → "Ask Tim to confirm Tariq Rana and Mari Kawasaki…" ($0.0007).
+- Known wording slip: one "none" suggestion read "Ask me how you can contribute…" ("me" = the agent).
