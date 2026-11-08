@@ -164,3 +164,9 @@ Personal tool. Visual "overworld" of all cmux agent sessions (workspaces = regio
 - Agents: tree of cards with status, model, duration, calls, own cost and cost with sub-agents; Whole session / This turn toggle.
 - Verified on all 25 live Claude sessions (each request under 0.1s; biggest turn payload 401 KB) and in the browser on "Discover sales rep scorecard" (9 parallel Sonnet sub-agents, $19.72). Live server restarted (pid 59671).
 - Not built yet: Context Map (estimate only), Agent Inbox upgrades, Handoff view.
+
+## 2026-11-08 (weekly usage meter)
+- Header shows the weekly limit like the Claude desktop app: bar, %, reset time + countdown, "on pace for N%" (straight-line projection to the reset; amber at 80%+, red "on pace to run out <day time>" at 100%+), and a sparkline of this week's readings.
+- Source: `https://api.anthropic.com/api/oauth/usage` (header `anthropic-beta: oauth-2025-04-20`) with the Claude Code login token read from Keychain `Claude Code-credentials` each poll (Claude Code keeps it fresh). `keep_usage` polls every 5 min and appends to `~/.overworld/usage.jsonl`; `/api/usage` returns the latest reading + this week's history. Page refreshes every 60s.
+- Endpoint gives whole percents only, and `resets_at` jitters by ~1s (23:59:59.8 vs 00:00:00.4 UTC); the page rounds it to the minute.
+- Verified on a test copy (:7718): live reading 10%, resets Thu 4:00 PM PST, on pace for 23%; fake 35% → amber 82%; fake 60% → "run out Tue 3:56 PM"; server down → red message. Header is now 2 rows (key hint on its own line), 67px.

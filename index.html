@@ -13,8 +13,21 @@
   body { margin: 0; background: var(--bg); color: var(--text); font: 13px/1.4 -apple-system, "SF Pro Text", system-ui, sans-serif; }
   header { display: flex; align-items: center; gap: 16px; padding: 12px 16px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--bg); z-index: 1; }
   h1 { font-size: 15px; margin: 0; letter-spacing: .02em; }
-  .tally { display: flex; gap: 12px; color: var(--muted); }
+  .tally { display: flex; gap: 12px; color: var(--muted); white-space: nowrap; }
+  header > button, header > label { white-space: nowrap; }
+  header { flex-wrap: wrap; row-gap: 6px; }
+  header > .hint { order: 1; flex-basis: 100%; }
   .tally b { color: var(--text); }
+  /* Weekly usage meter: the desktop app's weekly limit bar, plus pace and this week's readings */
+  .usage { display: flex; align-items: center; gap: 8px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .usage .bar { width: 100px; height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; }
+  .usage .fill { height: 100%; background: var(--working); }
+  .usage.warn .fill { background: var(--waiting); }
+  .usage.over .fill { background: var(--danger); }
+  .usage .pct { color: var(--text); font-weight: 600; }
+  .usage .pace.warn { color: var(--waiting); }
+  .usage .pace.over { color: var(--danger); }
+  .usage svg { display: block; }
   .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; vertical-align: middle; }
   label { margin-left: auto; color: var(--muted); cursor: pointer; user-select: none; }
   main { padding: 6px 16px 40px; display: flex; flex-wrap: wrap; align-items: stretch; }
@@ -198,6 +211,7 @@
 <header>
   <h1>Overworld</h1>
   <div class="tally" id="tally"></div>
+  <div class="usage" id="usage" title="Weekly usage limit, same as the Claude desktop app"></div>
   <button class="add" id="autoAll" title="Name every workspace and session from its conversation (key: a)">✨ Auto-name all</button>
   <button class="add" id="newGroup" title="New empty group">+ New group</button>
   <span class="hint">drag a session onto another region to move it, or onto blank group space for its own workspace · keys: arrows move · r reply (to all ticked, if any) · Space tick · Enter open · Esc clear · a auto-name · ⌘⇧1 back</span>
@@ -900,6 +914,53 @@ async function tick() {
 }
 tick();
 setInterval(tick, 3000);
+
+// Weekly usage meter. Server polls Claude's usage endpoint every 5 min and logs each reading; the page refreshes every minute.
+const usageBox = document.getElementById("usage");
+const SVGNS = "http://www.w3.org/2000/svg";
+function svgEl(tag, attrs) { const e = document.createElementNS(SVGNS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); return e; }
+function span(d) { const h = Math.floor(d / 3600), m = Math.floor((d % 3600) / 60); return h >= 24 ? `${Math.floor(h / 24)}d ${h % 24}h` : `${h}h ${m}m`; }
+function when(t) { return new Date(t * 1000).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" }); }
+function sparkline(history, start, end, now) {
+  // x = the whole week, y = 0 to a bit above the peak; one step per reading, dashed tick at now
+  const W = 90, H = 18, top = Math.max(10, ...history.map(h => h[1])) * 1.25;
+  const x = t => ((t - start) / (end - start)) * W, y = p => H - (p / top) * H;
+  const g = svgEl("svg", { width: W, height: H, viewBox: `0 0 ${W} ${H}` });
+  g.append(svgEl("line", { x1: 0, y1: H - 0.5, x2: W, y2: H - 0.5, stroke: "var(--line)" }));
+  g.append(svgEl("line", { x1: x(now), y1: 0, x2: x(now), y2: H, stroke: "var(--muted)", "stroke-dasharray": "2 2" }));
+  if (history.length) {
+    const pts = history.map(([t, p]) => `${x(t).toFixed(1)},${y(p).toFixed(1)}`).join(" ");
+    g.append(svgEl("polyline", { points: pts, fill: "none", stroke: "var(--working)", "stroke-width": 1.5 }));
+  }
+  return g;
+}
+async function loadUsage() {
+  let u;
+  try { u = await (await fetch("/api/usage")).json(); }
+  catch (e) { usageBox.replaceChildren(el("span", "pace over", "usage: server not reachable")); return; }
+  const main = u.weekly.find(l => l.kind === "weekly_all");
+  if (!main) { usageBox.replaceChildren(el("span", "pace over", u.error ? "usage unavailable: " + u.error : "usage: waiting for first reading")); return; }
+  const now = Date.now() / 1000, end = Math.round(new Date(main.resets_at).getTime() / 60000) * 60, start = end - 7 * 86400;
+  const elapsed = Math.min(1, Math.max(0, (now - start) / (end - start)));
+  const projected = elapsed > 0.02 ? Math.round(main.percent / elapsed) : null;  // straight-line projection to the reset
+  usageBox.className = "usage" + (main.percent >= 90 ? " over" : main.percent >= 70 ? " warn" : "");
+  const bar = el("div", "bar"), fill = el("div", "fill");
+  fill.style.width = Math.min(100, main.percent) + "%";
+  bar.append(fill);
+  let pace = el("span", "pace", projected == null ? "" : `on pace for ${projected}%`);
+  if (projected >= 100 && main.percent > 0) {
+    const hit = start + (100 / main.percent) * (now - start);  // when the limit runs out at this week's rate
+    pace = el("span", "pace over", `on pace to run out ${when(hit)}`);
+  } else if (projected >= 80) pace.className = "pace warn";
+  const others = u.weekly.filter(l => l !== main && l.active).map(l => el("span", null, `${l.label} ${l.percent}%`));
+  usageBox.replaceChildren(el("span", null, "Weekly"), bar, el("span", "pct", main.percent + "%"),
+    el("span", null, `resets ${when(end)} (${span(end - now)})`), pace, sparkline(u.history, start, end, now), ...others);
+  usageBox.title = `Weekly limit, same as the Claude desktop app. ${Math.round(elapsed * 100)}% of the week gone. ` +
+    `${u.history.length} readings this week. Last read ${u.at ? new Date(u.at * 1000).toLocaleTimeString() : "never"}` +
+    (u.error ? `. Last poll failed: ${u.error}` : "");
+}
+loadUsage();
+setInterval(loadUsage, 60000);
 </script>
 </body>
 </html>
