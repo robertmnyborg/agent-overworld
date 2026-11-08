@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """Agent Overworld: serves a map of cmux workspaces (regions) and tabs (sessions).
 
-Reads cmux's own records; writes nothing except ~/.overworld/edges.jsonl (via spinoff.sh).
+Reads cmux's own records; writes ~/.overworld/edges.jsonl (via spinoff.sh) and usage.jsonl (weekly usage readings).
 Started by autostart.zsh from the first cmux shell (cmux's socket only accepts processes launched inside cmux).
 While cmux is running, keeps a pinned "Overworld" workspace (browser pane on this server) in slot 1 (⌘1),
 and a pinned, ungrouped "Scratch" workspace in slot 2 for one-off sessions not yet worth their own workspace.
 """
-import hashlib, json, os, re, subprocess, threading, time
+import hashlib, json, os, re, subprocess, threading, time, urllib.error, urllib.request
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -965,6 +965,56 @@ def keep_actions():
         time.sleep(ACTION_EVERY)
 
 
+USAGE_URL = "https://api.anthropic.com/api/oauth/usage"  # what the desktop app's usage meter reads
+USAGE_LOG = Path.home() / ".overworld" / "usage.jsonl"  # one reading per poll, for the weekly pace line
+USAGE_EVERY = 300  # seconds between polls
+WEEK = 7 * 86400
+_usage = {"reading": None, "error": None, "at": None}
+
+
+def read_usage():
+    """Current weekly limits from Claude's usage endpoint, with the Claude Code login token from the Keychain (Claude Code refreshes it)."""
+    creds = subprocess.run(["/usr/bin/security", "find-generic-password", "-s", "Claude Code-credentials", "-w"],
+                           capture_output=True, text=True, timeout=10, check=True).stdout
+    token = json.loads(creds)["claudeAiOauth"]["accessToken"]
+    req = urllib.request.Request(USAGE_URL, headers={"Authorization": f"Bearer {token}", "anthropic-beta": "oauth-2025-04-20"})
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        data = json.load(resp)
+    limits = [{"kind": l["kind"], "label": (l.get("scope") or {}).get("model", {}).get("display_name") or "All models",
+               "percent": l["percent"], "resets_at": l["resets_at"], "active": l["is_active"]}
+              for l in data.get("limits") or [] if l.get("group") == "weekly"]
+    return {"at": time.time(), "weekly": limits}
+
+
+def keep_usage():
+    """Background: poll the usage endpoint and log every reading to USAGE_LOG."""
+    while True:
+        try:
+            reading = read_usage()
+            _usage.update(reading=reading, error=None, at=reading["at"])
+            with USAGE_LOG.open("a") as f:
+                f.write(json.dumps(reading) + "\n")
+        except (subprocess.SubprocessError, urllib.error.URLError, json.JSONDecodeError, KeyError, OSError) as e:
+            _usage.update(error=repr(e)[:300], at=time.time())
+            print(f"{time.strftime('%H:%M:%S')} usage poll failed: {e!r}"[:400], flush=True)
+        time.sleep(USAGE_EVERY)
+
+
+def usage():
+    """Latest weekly reading plus this week's history of the all-models limit (readings sharing its reset time)."""
+    reading = _usage["reading"]
+    main_limit = next((l for l in reading["weekly"] if l["kind"] == "weekly_all"), None) if reading else None
+    history = []
+    if main_limit and USAGE_LOG.exists():
+        week_start = _epoch(main_limit["resets_at"]) - WEEK
+        for line in USAGE_LOG.read_text().splitlines():
+            row = json.loads(line)
+            hit = next((l for l in row["weekly"] if l["kind"] == "weekly_all"), None)
+            if hit and row["at"] >= week_start:
+                history.append([row["at"], hit["percent"]])
+    return {"weekly": reading["weekly"] if reading else [], "history": history, "error": _usage["error"], "at": _usage["at"]}
+
+
 def autoname(workspace=None):
     """Name workspaces (all, or one) and their agent tabs from session content, one Haiku call per workspace in parallel."""
     agents = agent_sessions()
@@ -1119,6 +1169,8 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, handoffs(self.path.split("=", 1)[1]))
         elif self.path.startswith("/api/steps?surface="):
             self._send(200, recent_steps(self.path.split("=", 1)[1]))
+        elif self.path == "/api/usage":
+            self._send(200, usage())
         elif self.path.startswith("/api/timeline?surface="):
             self._send(200, timeline(self.path.split("=", 1)[1]))
         elif self.path in ("/", "/index.html"):
@@ -1198,4 +1250,5 @@ if __name__ == "__main__":
     print(f"Overworld on http://127.0.0.1:{PORT} (pid {os.getpid()})", flush=True)
     threading.Thread(target=keep_workspace, daemon=True).start()
     threading.Thread(target=keep_actions, daemon=True).start()
+    threading.Thread(target=keep_usage, daemon=True).start()
     httpd.serve_forever()
