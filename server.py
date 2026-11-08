@@ -541,6 +541,246 @@ def trace(surface, scope="turn", running=False):
     return {"scope": scope, "start": start, "now": now, "prompt": plain(_user_text(records[0]))[:140] if records else "", "root": root}
 
 
+# ---- Context map: what fills an agent's context window on its latest model call ----
+# Total is exact (the last call's input tokens). The split is estimated: system prompt and tool definitions come
+# from the request shape Claude Code records; the rest from transcript text since the last compaction. Each part's
+# share of characters is scaled to the exact total.
+CONTEXT_LIMITS = {"claude-haiku-4-5": 200_000}  # everything current is 1M
+CONTEXT_DEFAULT = 1_000_000
+ATTACHMENT_KIND = {
+    "instructions": "memory", "nested_memory": "memory",
+    "skill_listing": "skills", "invoked_skills": "skills",
+    "agent_listing_delta": "tools", "mcp_instructions_delta": "tools", "deferred_tools_delta": "tools", "deferred_tools_record": "tools",
+    "file": "files", "edited_text_file": "files", "compact_file_reference": "files",
+    "hook_additional_context": "hooks", "hook_blocking_error": "hooks",
+}
+SKIP_ATTACHMENTS = {"hook_success", "hook_cancelled", "prompt_snapshot", "queued_command"}  # not sent to the model, or already counted
+ATTACHMENT_LABEL = {"instructions": "CLAUDE.md + memory index", "nested_memory": "nested CLAUDE.md", "skill_listing": "skill list",
+                    "invoked_skills": "loaded skills", "agent_listing_delta": "agent list", "mcp_instructions_delta": "MCP server instructions",
+                    "deferred_tools_delta": "deferred tool names", "deferred_tools_record": "tool schemas loaded by ToolSearch"}
+IMAGE_CHARS = 5600  # an image costs about 1,600 tokens; counted as this many characters, not its base64 length
+ITEMS_PER_BLOCK = 12
+_raw_cache = {}
+
+
+def _raw(path):
+    """Every JSON record of a transcript (all types), cached by mtime."""
+    mtime = path.stat().st_mtime
+    hit = _raw_cache.get(path)
+    if not hit or hit[0] != mtime:
+        out = []
+        with open(path, "rb") as f:
+            for raw in f:
+                try:
+                    out.append(json.loads(raw))
+                except json.JSONDecodeError:
+                    continue
+        hit = _raw_cache[path] = (mtime, out)
+    return hit[1]
+
+
+def _size(value):
+    """Characters a value adds to the context; images count as IMAGE_CHARS whatever their encoded size."""
+    if isinstance(value, str):
+        return len(value)
+    if isinstance(value, list):
+        return sum(IMAGE_CHARS if isinstance(b, dict) and b.get("type") in ("image", "document") else _size(b) for b in value)
+    if isinstance(value, dict):
+        if value.get("type") in ("image", "document"):
+            return IMAGE_CHARS
+        if value.get("type") == "text":
+            return len(value.get("text", ""))
+        return sum(len(k) + _size(v) for k, v in value.items())
+    return len(json.dumps(value, ensure_ascii=False))
+
+
+def context_map(surface, agent=""):
+    sess = agent_sessions().get(surface) or {}
+    main = Path(sess.get("transcript") or "")
+    if not main.is_file():
+        return {"error": "no Claude transcript for this tab"}
+    folder = main.with_suffix("") / "subagents"
+    subs = sorted(folder.glob("agent-*.jsonl"), key=lambda p: -p.stat().st_mtime) if folder.is_dir() else []
+    agents = [{"id": "", "name": "main session"}] + [
+        {"id": p.stem, "name": (load_json(p.with_suffix(".meta.json")).get("description") or p.stem)} for p in subs]
+    path = folder / f"{agent}.jsonl" if agent else main
+    if agent and (not re.fullmatch(r"agent-[A-Za-z0-9]+", agent) or not path.is_file()):
+        return {"error": "unknown agent"}
+    records = _raw(path)
+    bounds = [i for i, r in enumerate(records) if r.get("type") == "system" and r.get("subtype") == "compact_boundary"]
+    start = bounds[-1] + 1 if bounds else 0
+    parts = {}
+    def add(kind, item, chars):
+        if chars > 0:
+            parts.setdefault(kind, {})[item] = parts.get(kind, {}).get(item, 0) + chars
+    shape = next((r.get("shape") for r in reversed(records) if r.get("type") == "api-request-shape"), None) or {}
+    for i, b in enumerate(shape.get("system") or []):
+        add("system", ["header", "harness", "instructions"][i] if i < 3 else f"block {i + 1}", _size(b.get("text", "")))
+    for t in shape.get("tools") or []:
+        add("tools", t.get("name") or "tool", _size(t))
+    tool_of = {}
+    for r in records[start:]:
+        kind = r.get("type")
+        if kind == "attachment":
+            a = r.get("attachment") or {}
+            if a.get("type") in SKIP_ATTACHMENTS:
+                continue
+            body = {k: v for k, v in a.items() if k not in ("type", "toolUseID", "hookName", "hookEvent", "command", "durationMs", "exitCode")}
+            add(ATTACHMENT_KIND.get(a.get("type"), "reminders"),
+                (a.get("filename") or a.get("path") or ATTACHMENT_LABEL.get(a.get("type")) or a.get("type")).replace(str(Path.home()), "~"), _size(body))
+            continue
+        if kind not in ("user", "assistant"):
+            continue
+        msg = r.get("message") or {}
+        if r.get("isCompactSummary"):
+            add("summary", "compaction summary", _size(msg.get("content")))
+            continue
+        content = msg.get("content")
+        if isinstance(content, str):
+            add("chat", "your messages" if kind == "user" else "replies", len(content))
+            continue
+        for b in content if isinstance(content, list) else []:
+            bt = b.get("type")
+            if bt == "text":
+                add("chat", "your messages" if kind == "user" else "replies", len(b.get("text", "")))
+            elif bt == "tool_use":
+                inp = b.get("input") or {}
+                tool_of[b.get("id")] = (b.get("name"), inp.get("file_path") or inp.get("notebook_path"))
+                add("calls", b.get("name") or "tool", _size(inp))
+            elif bt == "tool_result":
+                name, fpath = tool_of.get(b.get("tool_use_id"), ("tool", None))
+                if fpath:
+                    add("files", fpath.replace(str(Path.home()), "~"), _size(b.get("content")))
+                else:
+                    add("results", name or "tool", _size(b.get("content")))
+    last = next((r for r in reversed(records) if r.get("type") == "assistant" and (r.get("message") or {}).get("usage")), None)
+    if not last:
+        return {"error": "no model call yet", "agents": agents}
+    u, model = last["message"]["usage"], last["message"].get("model") or ""
+    total = u.get("input_tokens", 0) + u.get("cache_read_input_tokens", 0) + u.get("cache_creation_input_tokens", 0)
+    chars = sum(sum(v.values()) for v in parts.values()) or 1
+    scale = total / chars
+    blocks = []
+    for kind, items in parts.items():
+        ranked = sorted(items.items(), key=lambda kv: -kv[1])
+        shown = ranked[:ITEMS_PER_BLOCK]
+        rest = sum(v for _, v in ranked[ITEMS_PER_BLOCK:])
+        out = [{"label": k, "tokens": round(v * scale)} for k, v in shown]
+        if rest:
+            out.append({"label": f"{len(ranked) - ITEMS_PER_BLOCK} more", "tokens": round(rest * scale)})
+        blocks.append({"kind": kind, "tokens": round(sum(items.values()) * scale), "items": out})
+    blocks.sort(key=lambda b: -b["tokens"])
+    limit = next((v for k, v in CONTEXT_LIMITS.items() if model.startswith(k)), CONTEXT_DEFAULT)
+    return {"agents": agents, "agent": agent, "model": model, "total": total, "limit": limit, "blocks": blocks,
+            "cached": u.get("cache_read_input_tokens", 0), "at": _epoch(last["timestamp"]),
+            "compactions": len(bounds), "compacted_at": _epoch(records[bounds[-1]]["timestamp"]) if bounds and records[bounds[-1]].get("timestamp") else None}
+
+
+# ---- Handoffs: what each spin-off or sub-agent was given, what came back, and what it was not told ----
+LOST_WINDOW = 30 * 60  # seconds before a handoff in which the parent's files count as "it was working on this"
+BRIEF_CHARS = 6000
+FILE_TOOLS = {"Read", "Edit", "Write", "NotebookEdit"}
+# Working files only: screenshots, scratch space and spilled tool output are never worth flagging as "not passed along".
+NOISE_FILE = re.compile(r"\.(png|jpe?g|gif|webp|pdf)$|/tool-results/|/scratchpad/|^/(private/)?tmp/|/\.cache/", re.I)
+REF_PATH = re.compile(r"(?:~|/Users/[\w.-]+)/[\w./@+-]+[\w/]")
+REF_URL = re.compile(r"https?://[^\s)>\]`'\"]+")
+
+
+def _refs(text):
+    """Files and links a brief names: these went along with the handoff."""
+    home = str(Path.home())
+    files = {m.replace(home, "~").rstrip(".,") for m in REF_PATH.findall(text or "")}
+    urls = {m.rstrip(".,") for m in REF_URL.findall(text or "")}
+    return [{"label": f, "kind": "file"} for f in sorted(files)] + [{"label": u, "kind": "source"} for u in sorted(urls)]
+
+
+def _not_carried(transcript, at, text):
+    """Files the parent read or edited in the LOST_WINDOW before `at` that the brief never names (by file name)."""
+    if not transcript or not Path(transcript).is_file():
+        return []
+    home, seen = str(Path.home()), {}
+    for e in _all_records(Path(transcript)):
+        t = _epoch(e["timestamp"])
+        if not at - LOST_WINDOW <= t <= at or e["type"] != "assistant":
+            continue
+        for b in _blocks(e):
+            if b.get("type") == "tool_use" and b.get("name") in FILE_TOOLS:
+                fp = (b.get("input") or {}).get("file_path") or (b.get("input") or {}).get("notebook_path")
+                if fp:
+                    seen[fp] = b["name"]
+    return [{"label": fp.replace(home, "~"), "kind": "file", "lost": True,
+             "why": f"parent used it ({tool}) in the {LOST_WINDOW // 60} min before; the brief never names it"}
+            for fp, tool in seen.items() if Path(fp).name not in (text or "") and not NOISE_FILE.search(fp)]
+
+
+def _first_text(records, role):
+    for e in records if role == "user" else reversed(records):
+        if e["type"] != role:
+            continue
+        text = _user_text(e) if role == "user" else " ".join(b.get("text", "") for b in _blocks(e) if b.get("type") == "text")
+        if text.strip():
+            return text
+    return ""
+
+
+def handoffs(surface):
+    sessions = agent_sessions()
+    main = (sessions.get(surface) or {}).get("transcript")
+    out = []
+    for line in EDGES.read_text().splitlines() if EDGES.is_file() else []:
+        try:
+            e = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if surface not in (e.get("parent"), e.get("child")):
+            continue
+        brief_path = Path(e.get("brief") or "")
+        brief = brief_path.read_text(errors="replace") if brief_path.is_file() else ""
+        parent_tx = (sessions.get(e.get("parent")) or {}).get("transcript")
+        out.append({"kind": "spinoff", "direction": "out" if e.get("parent") == surface else "in", "from": e.get("parent"),
+                    "to": e.get("child"), "title": e.get("title") or "spin-off", "at": e.get("at"), "status": None,
+                    "given": brief[:BRIEF_CHARS], "returned": None,
+                    "items": _refs(brief) + _not_carried(parent_tx, e.get("at") or 0, brief)})
+    folder = Path(main).with_suffix("") / "subagents" if main else None
+    for p in sorted(folder.glob("agent-*.jsonl")) if folder and folder.is_dir() else []:
+        meta, records = load_json(p.with_suffix(".meta.json")), _all_records(p)
+        if not records:
+            continue
+        row = subagent_row(p)
+        given = _first_text(records, "user")
+        at = _epoch(records[0]["timestamp"])
+        out.append({"kind": "subagent", "direction": "out", "from": surface, "to": None,
+                    "title": meta.get("description") or p.stem, "type": meta.get("agentType") or "agent", "at": at, "status": row["status"],
+                    "given": given[:BRIEF_CHARS], "returned": _first_text(records, "assistant")[:BRIEF_CHARS] if row["status"] == "done" else None,
+                    "items": _refs(given) + _not_carried(main, at, given)})
+    out.sort(key=lambda h: -(h["at"] or 0))
+    return {"handoffs": out}
+
+
+STEPS = 6  # recent steps shown when an inbox row unfolds
+
+
+def recent_steps(surface):
+    """The last few things a session did: tool calls, replies and prompts, newest first."""
+    path = Path((agent_sessions().get(surface) or {}).get("transcript") or "")
+    if not path.is_file():
+        return {"steps": []}
+    steps = []
+    for e in reversed(_records(path, 400_000)):
+        t = e["timestamp"]
+        if e["type"] == "assistant":
+            for b in reversed(_blocks(e)):
+                if b.get("type") == "tool_use":
+                    steps.append({"at": t, "kind": "tool", "label": _tool_label(b)})
+                elif b.get("type") == "text" and b.get("text", "").strip():
+                    steps.append({"at": t, "kind": "reply", "label": plain(b["text"])[:160]})
+        elif _is_prompt(e):
+            steps.append({"at": t, "kind": "prompt", "label": plain(_user_text(e))[:160]})
+        if len(steps) >= STEPS:
+            break
+    return {"steps": steps[:STEPS]}
+
+
 def agent_sessions():
     """surface_id -> {agent, lifecycle, recap, cwd, updated, pid} for Claude and agy."""
     out = {}
@@ -872,6 +1112,13 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path.startswith("/api/trace?surface="):
             q = dict(kv.split("=", 1) for kv in self.path.split("?", 1)[1].split("&") if "=" in kv)
             self._send(200, trace(q["surface"], "session" if q.get("scope") == "session" else "turn", q.get("running") == "1"))
+        elif self.path.startswith("/api/context?surface="):
+            q = dict(kv.split("=", 1) for kv in self.path.split("?", 1)[1].split("&") if "=" in kv)
+            self._send(200, context_map(q["surface"], q.get("agent", "")))
+        elif self.path.startswith("/api/handoffs?surface="):
+            self._send(200, handoffs(self.path.split("=", 1)[1]))
+        elif self.path.startswith("/api/steps?surface="):
+            self._send(200, recent_steps(self.path.split("=", 1)[1]))
         elif self.path.startswith("/api/timeline?surface="):
             self._send(200, timeline(self.path.split("=", 1)[1]))
         elif self.path in ("/", "/index.html"):

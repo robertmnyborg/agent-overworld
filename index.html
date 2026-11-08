@@ -142,6 +142,51 @@
   .at-card.running .dot { background: var(--working); animation: pulse 1.4s ease-in-out infinite; }
   .at-card.done .dot { background: var(--done); }
   .at-card.stopped .dot { background: var(--idle); }
+  /* Context map (treemap), handoffs, inbox */
+  .cm-head { display: flex; flex-wrap: wrap; gap: 4px 16px; align-items: baseline; margin-bottom: 6px; }
+  .cm-head select { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 2px 6px; font: inherit; max-width: 320px; }
+  .cm-meter { height: 6px; background: var(--bg); border-radius: 3px; overflow: hidden; margin: 6px 0 10px; }
+  .cm-meter i { display: block; height: 100%; background: var(--working); }
+  .cm-map { position: relative; height: 440px; margin-top: 8px; }
+  .cm-cat { position: absolute; border: 1px solid var(--panel); box-sizing: border-box; overflow: hidden; transition: all .4s ease; }
+  .cm-cat.free { border: 1px dashed var(--line); background: transparent; }
+  .cm-cat > b { position: absolute; left: 4px; top: 2px; font-size: 11px; z-index: 1; text-shadow: 0 1px 2px rgba(0,0,0,.6); white-space: nowrap; }
+  .cm-item { position: absolute; box-sizing: border-box; border: 1px solid rgba(0,0,0,.35); padding: 16px 4px 2px; font-size: 10px; overflow: hidden; color: rgba(255,255,255,.85); transition: all .4s ease; }
+  .cm-item span { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cm-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; font-size: 11px; color: var(--muted); }
+  .cm-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: middle; }
+  .ho { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin: 8px 0; }
+  .ho-top { display: flex; gap: 8px; align-items: baseline; }
+  .ho-top b { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ho-badge { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; white-space: nowrap; }
+  .ho details { margin-top: 6px; }
+  .ho summary { cursor: pointer; color: var(--muted); font-size: 11px; }
+  .ho pre { margin: 4px 0 0; max-height: 240px; overflow: auto; white-space: pre-wrap; word-break: break-word; font: 11px/1.45 ui-monospace, Menlo, monospace; background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 6px 8px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+  .chip { font-size: 11px; border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chip.lost { border-style: dashed; color: var(--danger); text-decoration: line-through; text-decoration-color: rgba(255,107,107,.5); }
+  .chip.src { color: var(--working); }
+  #inbox { position: fixed; inset: 0; z-index: 6; background: var(--scrim); display: flex; justify-content: center; align-items: flex-start; padding: 48px 16px; }
+  #inbox[hidden] { display: none; }
+  .ib { width: min(860px, 100%); max-height: calc(100vh - 96px); overflow-y: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+  .ib-tabs { display: flex; gap: 4px; margin: 10px 0; }
+  .ib-tabs button { background: var(--bg); color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 3px 10px; font: inherit; cursor: pointer; }
+  .ib-tabs button.on { color: var(--text); border-color: var(--working); }
+  .ib-tabs b { margin-left: 4px; }
+  .ib-row { border-top: 1px solid var(--line); padding: 8px 4px; }
+  .ib-row .top { display: flex; gap: 8px; align-items: baseline; cursor: pointer; }
+  .ib-row .top b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ib-row .top .meta { color: var(--muted); font-size: 11px; white-space: nowrap; margin-left: auto; }
+  .ib-row .line { color: var(--muted); margin: 2px 0 0 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ib-row.waiting .line { color: var(--text); }
+  .ib-row .dot { background: var(--c); }
+  .ib-row.sub { padding-left: 22px; }
+  .ib-steps { list-style: none; margin: 8px 0 0 13px; padding: 0; font-size: 12px; }
+  .ib-steps li { display: flex; gap: 8px; padding: 1px 0; color: var(--muted); }
+  .ib-steps li span:last-child { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ib-acts { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 2px 13px; }
+  .ib-acts button { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 2px 10px; font: inherit; cursor: pointer; }
+  .ib-acts button.opt { border-color: var(--waiting); }
   .session .recap.ask { color: var(--text); }
   /* Reply view: one session blown up over the dimmed map */
   #peek { position: fixed; inset: 0; z-index: 7; background: var(--scrim); display: flex; align-items: center; justify-content: center; padding: 24px 16px; }
@@ -200,11 +245,13 @@
   <div class="tally" id="tally"></div>
   <button class="add" id="autoAll" title="Name every workspace and session from its conversation (key: a)">✨ Auto-name all</button>
   <button class="add" id="newGroup" title="New empty group">+ New group</button>
-  <span class="hint">drag a session onto another region to move it, or onto blank group space for its own workspace · keys: arrows move · r reply (to all ticked, if any) · Space tick · Enter open · Esc clear · a auto-name · ⌘⇧1 back</span>
+  <button class="add" id="inboxBtn" title="Every session and background agent in one list (key: i)">Inbox</button>
+  <span class="hint">drag a session onto another region to move it, or onto blank group space for its own workspace · keys: arrows move · r reply (to all ticked, if any) · Space tick · Enter open · Esc clear · a auto-name · i inbox · ⌘⇧1 back</span>
   <label><input type="checkbox" id="showShells"> show plain shells</label>
 </header>
 <main id="map"></main>
 <aside id="tl" hidden></aside>
+<div id="inbox" hidden></div>
 <script>
 const ORDER = { waiting: 0, done: 1, working: 2, idle: 3, shell: 4 };
 const LABEL = { waiting: "your turn", done: "finished", working: "working", idle: "idle", shell: "shell" };
@@ -557,7 +604,7 @@ function laneEl(t) {
 const tl = document.getElementById("tl");
 let tlSession = null;
 const KIND = { model: "model generating", tool: "tool call", agents: "waiting on background agents", you: "waiting on you" };
-const VIEWS = { timeline: "Timeline", waterfall: "Waterfall", agents: "Agents" };
+const VIEWS = { timeline: "Timeline", waterfall: "Waterfall", agents: "Agents", context: "Context", handoffs: "Handoffs" };
 let tlView = "timeline", tlScope = "session";
 try { tlView = VIEWS[localStorage.getItem("tlView")] ? localStorage.getItem("tlView") : "timeline"; tlScope = localStorage.getItem("tlScope") === "turn" ? "turn" : "session"; } catch (e) { /* storage blocked: defaults */ }
 const folded = new Set(), opened = new Set(), unfolded = new Set();  // survive the 3s refresh; unfolded = sub-agents opened in the waterfall
@@ -579,6 +626,8 @@ function closeTimeline() { tlSession = null; tl.hidden = true; }
 document.addEventListener("keydown", e => { if (e.key === "Escape" && tlSession) closeTimeline(); });
 async function loadTimeline() {
   if (!tlSession) return;
+  if (tlView === "context") return loadContext();
+  if (tlView === "handoffs") return loadHandoffs();
   if (tlView !== "timeline") return loadTrace();
   const t = tlSession, d = await (await fetch("/api/timeline?surface=" + encodeURIComponent(t.id))).json();
   if (tlSession !== t || tlView !== "timeline") return;
@@ -763,6 +812,190 @@ function agentTree(d) {
   };
   return [scopes, ...traceSummary(d, d.root), list([d.root])];
 }
+// Context map: what fills an agent's context window on its latest call. Total exact, split estimated.
+const CM_KIND = { system: ["System prompt", "#64748b"], tools: ["Tool definitions", "#b48cff"], memory: ["CLAUDE.md + memory", "#2bb3a3"],
+  skills: ["Skills", "#d16bd6"], files: ["Files", "#3ecf8e"], chat: ["Conversation", "#4c8dff"], calls: ["Tool calls", "#7aa2ff"],
+  results: ["Tool results", "#f5a524"], summary: ["Compaction summary", "#94a3b8"], reminders: ["Reminders", "#6b7280"], hooks: ["Hooks", "#ff6b6b"] };
+let ctxAgent = "";
+function squarify(values, W, H) {
+  // Squarified treemap: rows along the shorter side, each row kept as square as possible.
+  const total = values.reduce((a, b) => a + b, 0) || 1, areas = values.map(v => v / total * W * H), out = [];
+  let x = 0, y = 0, w = W, h = H, i = 0;
+  const worst = (row, side) => { const s = row.reduce((a, b) => a + b, 0), mx = Math.max(...row), mn = Math.min(...row);
+    return Math.max(side * side * mx / (s * s), s * s / (side * side * mn)); };
+  while (i < areas.length) {
+    const side = Math.min(w, h) || 1;
+    let row = [areas[i]], j = i + 1;
+    while (j < areas.length && worst(row.concat(areas[j]), side) <= worst(row, side)) row.push(areas[j++]);
+    const s = row.reduce((a, b) => a + b, 0), thick = s / side;
+    let off = 0;
+    row.forEach(a => { const len = a / thick;
+      out.push(w >= h ? { x, y: y + off, w: thick, h: len } : { x: x + off, y, w: len, h: thick }); off += len; });
+    if (w >= h) { x += thick; w -= thick; } else { y += thick; h -= thick; }
+    i = j;
+  }
+  return out;
+}
+async function loadContext() {
+  const t = tlSession;
+  const d = await (await fetch(`/api/context?surface=${encodeURIComponent(t.id)}&agent=${encodeURIComponent(ctxAgent)}`)).json();
+  if (tlSession !== t || tlView !== "context") return;
+  const head = drawerHead(t, "latest model call");
+  if (d.error && !d.agents) { tl.replaceChildren(...head, el("div", "tl-prompt", d.error)); return; }
+  const top = el("div", "cm-head");
+  if (d.agents && d.agents.length > 1) {
+    const pick = el("select");
+    d.agents.forEach(a => { const o = el("option", null, a.name); o.value = a.id; o.selected = a.id === ctxAgent; pick.append(o); });
+    pick.onchange = () => { ctxAgent = pick.value; loadContext(); };
+    top.append(pick);
+  }
+  if (d.error) { tl.replaceChildren(...head, top, el("div", "tl-prompt", d.error)); return; }
+  const kv = (k, v) => { const s = el("span"); s.append(el("span", "k", k + " "), el("b", null, v)); top.append(s); };
+  kv("context", `${toks(d.total)} of ${toks(d.limit)} (${Math.round(d.total / d.limit * 100)}%)`);
+  kv("model", short(d.model));
+  kv("from cache", Math.round(d.cached / Math.max(d.total, 1) * 100) + "%");
+  kv("last call", ago(new Date(d.at * 1000).toISOString()));
+  if (d.compactions) kv("compacted", `${d.compactions}× · last ${ago(new Date(d.compacted_at * 1000).toISOString())}`);
+  const meter = el("div", "cm-meter"), fill = el("i"); fill.style.width = Math.min(100, d.total / d.limit * 100) + "%"; meter.append(fill);
+  const map = el("div", "cm-map");
+  const parts = d.blocks.concat([{ kind: "free", tokens: Math.max(0, d.limit - d.total), items: [] }]).filter(b => b.tokens > 0);
+  // Draw after layout so the map knows its width.
+  requestAnimationFrame(() => {
+    const W = map.clientWidth, H = map.clientHeight;
+    squarify(parts.map(b => b.tokens), W, H).forEach((r, i) => {
+      const b = parts[i], [label, color] = CM_KIND[b.kind] || ["Free", "transparent"];
+      const cat = el("div", "cm-cat" + (b.kind === "free" ? " free" : ""));
+      Object.assign(cat.style, { left: r.x + "px", top: r.y + "px", width: r.w + "px", height: r.h + "px" });
+      cat.title = `${label} · ${toks(b.tokens)} tokens (${(b.tokens / d.limit * 100).toFixed(1)}% of the window)`;
+      if (r.w > 60 && r.h > 16) cat.append(el("b", null, `${label} ${toks(b.tokens)}`));
+      squarify(b.items.map(it => it.tokens), r.w, r.h).forEach((q, k) => {
+        const it = b.items[k], tile = el("div", "cm-item");
+        Object.assign(tile.style, { left: q.x + "px", top: q.y + "px", width: q.w + "px", height: q.h + "px", background: color, opacity: 0.55 + 0.45 * (1 - k / Math.max(b.items.length, 1)) });
+        tile.title = `${it.label} · ${toks(it.tokens)} tokens`;
+        if (q.w > 70 && q.h > 30) tile.append(el("span", null, it.label), el("span", null, toks(it.tokens)));
+        cat.append(tile);
+      });
+      map.append(cat);
+    });
+  });
+  const legend = el("div", "cm-legend");
+  d.blocks.forEach(b => { const [label, color] = CM_KIND[b.kind] || [b.kind, "#888"]; const s = el("span"), i = el("i"); i.style.background = color;
+    s.append(i, `${label} ${toks(b.tokens)} (${Math.round(b.tokens / d.total * 100)}%)`); legend.append(s); });
+  const free = el("span"), fi = el("i"); fi.style.border = "1px dashed var(--muted)"; free.append(fi, `free ${toks(d.limit - d.total)}`); legend.append(free);
+  tl.replaceChildren(...head, top, meter, el("div", "hint", "total is exact (the latest call's input); the split is estimated from text length · hover a tile for its size"), map, legend);
+}
+
+// Handoffs: what each spin-off or sub-agent was given, what came back, and what it was never told.
+async function loadHandoffs() {
+  const t = tlSession, d = await (await fetch("/api/handoffs?surface=" + encodeURIComponent(t.id))).json();
+  if (tlSession !== t || tlView !== "handoffs") return;
+  const head = drawerHead(t, "spin-offs and sub-agents");
+  if (!d.handoffs.length) { tl.replaceChildren(...head, el("div", "tl-prompt", "No handoffs from this session yet: no /spinoff and no sub-agents.")); return; }
+  const open = new Set([...tl.querySelectorAll("details[open]")].map(x => x.dataset.k));
+  const keep = tl.scrollTop;
+  const cards = d.handoffs.map(h => {
+    const box = el("div", "ho"), top = el("div", "ho-top");
+    const badge = h.kind === "spinoff" ? (h.direction === "out" ? "spin-off →" : "← spun off from") : "sub-agent · " + h.type;
+    top.append(el("span", "ho-badge", badge), el("b", null, h.title), el("span", "hint", [h.status, h.at ? ago(new Date(h.at * 1000).toISOString()) : ""].filter(Boolean).join(" · ")));
+    const other = h.kind === "spinoff" ? sessionById(h.direction === "out" ? h.to : h.from) : null;
+    if (other) { const go = el("button", "add", "Open"); go.onclick = () => fetch("/api/focus", { method: "POST", body: JSON.stringify({ workspace: other.workspace, surface: other.id }) }); top.append(go); }
+    box.append(top);
+    const section = (k, label, text) => { const det = el("details"); det.dataset.k = h.title + h.at + k; det.open = open.has(det.dataset.k);
+      det.append(el("summary", null, label), el("pre", null, text)); box.append(det); };
+    section("g", h.kind === "spinoff" ? "brief it was given" : "prompt it was given", h.given || "(empty)");
+    if (h.returned) section("r", "what came back", h.returned);
+    else if (h.kind === "subagent") box.append(el("div", "hint", h.status === "running" ? "still working" : "no final report"));
+    const carried = h.items.filter(i => !i.lost), lost = h.items.filter(i => i.lost);
+    if (h.items.length) {
+      const chips = el("div", "chips");
+      carried.forEach(i => { const c = el("span", "chip" + (i.kind === "source" ? " src" : ""), i.label); c.title = "named in the brief: went along"; chips.append(c); });
+      lost.forEach(i => { const c = el("span", "chip lost", i.label); c.title = i.why; chips.append(c); });
+      box.append(chips);
+      if (lost.length) box.append(el("div", "hint", `${lost.length} file${lost.length > 1 ? "s" : ""} the parent was using that the brief never names (struck through)`));
+    }
+    return box;
+  });
+  tl.replaceChildren(...head, ...cards);
+  tl.scrollTop = keep;
+}
+
+// Inbox: every agent session and running background agent in one list, filtered by what needs you.
+const ib = document.getElementById("inbox");
+let ibTab = "waiting", ibOpen = new Set();
+const ibSteps = new Map();  // surface -> {at, steps}; kept across the 3s redraw so unfolded rows don't flicker
+const STEPS_TTL = 5000;
+function stepsFor(id) {
+  const hit = ibSteps.get(id);
+  if (!hit || Date.now() - hit.at > STEPS_TTL) {
+    ibSteps.set(id, { at: Date.now(), steps: hit ? hit.steps : null });
+    fetch("/api/steps?surface=" + encodeURIComponent(id)).then(x => x.json())
+      .then(d => { ibSteps.set(id, { at: Date.now(), steps: d.steps }); renderInbox(); });
+  }
+  return ibSteps.get(id).steps;
+}
+const IB_TABS = { waiting: "Needs you", working: "Working", done: "Finished", all: "All" };
+function inboxRows() {
+  const rows = [];
+  (last ? last.regions : []).forEach(r => r.sessions.filter(t => t.agent).forEach(t => {
+    rows.push({ t, region: r.title, status: t.status });
+    t.subagents.filter(a => a.status === "running").forEach(a => rows.push({ t, sub: a, region: r.title, status: "working" }));
+  }));
+  return rows;
+}
+function openInbox() { ib.hidden = false; editing = true; renderInbox(); }
+function closeInbox() { ib.hidden = true; editing = false; render(last); }
+function renderInbox() {
+  if (ib.hidden) return;
+  const rows = inboxRows(), count = k => k === "all" ? rows.length : rows.filter(r => r.status === k).length;
+  const panel = el("div", "ib"), head = el("div", "tl-head"), x = el("span", "x", "×");
+  x.onclick = closeInbox;
+  head.append(el("b", null, "Inbox"), el("span", "hint", "click a row for its last steps · Esc closes"), x);
+  const tabs = el("div", "ib-tabs");
+  Object.entries(IB_TABS).forEach(([k, label]) => { const b = el("button", k === ibTab ? "on" : null, label); b.append(el("b", null, String(count(k))));
+    b.onclick = () => { ibTab = k; renderInbox(); }; tabs.append(b); });
+  panel.append(head, tabs);
+  const order = { waiting: 0, working: 1, done: 2, idle: 3 };
+  rows.filter(r => ibTab === "all" || r.status === ibTab)
+    .sort((a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9) || a.t.title.localeCompare(b.t.title) || (a.sub ? 1 : 0) - (b.sub ? 1 : 0))  // stable: rows don't jump while you click
+    .forEach(r => {
+      const t = r.t, key = r.sub ? t.id + "|" + r.sub.label : t.id, row = el("div", "ib-row " + r.status + (r.sub ? " sub" : ""));
+      row.style.setProperty("--c", `var(--${r.status})`);
+      const top = el("div", "top");
+      top.append(el("span", "dot"), el("b", null, r.sub ? `↳ ${r.sub.type}: ${r.sub.label}` : t.title),
+        el("span", "meta", [r.sub ? "in " + t.title : r.region, LABEL[r.status] || r.status, r.sub ? span(r.sub.started, new Date().toISOString()) : ago(t.since)].filter(Boolean).join(" · ")));
+      top.onclick = () => { ibOpen.has(key) ? ibOpen.delete(key) : ibOpen.add(key); renderInbox(); };
+      row.append(top);
+      const ask = r.sub ? r.sub.detail : (r.status === "waiting" && ((t.action && t.action.action) || t.ask)) || t.recap;
+      if (ask) row.append(el("div", "line", ask));
+      if (ibOpen.has(key)) {
+        if (!r.sub) {
+          const steps = el("ol", "ib-steps"), got = stepsFor(t.id);
+          if (!got) steps.append(el("li", null, "loading…"));
+          (got || []).forEach(s => { const li = el("li"); li.append(el("span", null, ago(s.at)), el("span", null, s.kind), el("span", null, s.label)); steps.append(li); });
+          row.append(steps);
+        }
+        const acts = el("div", "ib-acts");
+        const btn = (label, fn, cls) => { const b = el("button", cls, label); b.onclick = e => { e.stopPropagation(); fn(b); }; acts.append(b); };
+        btn("Open", () => fetch("/api/focus", { method: "POST", body: JSON.stringify({ workspace: t.workspace, surface: t.id }) }));
+        if (!r.sub) btn("Reply", () => { closeInbox(); select(t.id); openReply(t.id); });
+        btn(r.sub ? "Timeline" : "Waterfall", () => { closeInbox(); if (!r.sub) { tlView = "waterfall"; remember("tlView", "waterfall"); } openTimeline(t); });
+        if (!r.sub && r.status === "waiting" && t.action && t.action.options) t.action.options.forEach(o =>
+          btn(o, async b => { b.disabled = true; const err = await sendTo(t, o); b.textContent = err ? "not sent: " + err : "sent ✓"; }, "opt"));
+        row.append(acts);
+      }
+      panel.append(row);
+    });
+  if (!panel.querySelector(".ib-row")) panel.append(el("div", "tl-prompt", "Nothing here."));
+  const keep = ib.firstChild ? ib.firstChild.scrollTop : 0;
+  ib.replaceChildren(panel);
+  panel.scrollTop = keep;
+}
+ib.onclick = e => { if (e.target === ib) closeInbox(); };
+document.getElementById("inboxBtn").onclick = openInbox;
+document.addEventListener("keydown", e => {
+  if (!ib.hidden && e.key === "Escape") { closeInbox(); return; }
+  if (e.key === "i" && ib.hidden && !typing(e) && !document.getElementById("peek")) openInbox();
+});
 setInterval(loadTimeline, 3000);
 
 function render(state) {
@@ -894,6 +1127,7 @@ async function tick() {
     const state = await (await fetch("/api/state")).json();
     last = state;
     if (!dragging && !draggingRegion && !editing) render(last);  // re-rendering mid-drag or mid-rename would drop it
+    renderInbox();  // no-op while the inbox is closed
   } catch (e) {
     map.replaceChildren(el("div", "err", "Overworld server not reachable: " + e.message));
   }
