@@ -406,6 +406,141 @@ def timeline(surface):
             "lanes": lanes, "totals": totals, "slowest": slowest}
 
 
+# ---- Trace: agents, model calls and tool calls as one tree, with tokens and cost ----
+# List prices in $ per million tokens: (input, output, cache read). Cache writes are 1.25x input (5 min) or 2x (1 h).
+# Source: claude-api skill model table, cached 2026-10-06. Longest matching prefix wins; unknown models cost None.
+PRICES = {
+    "claude-fable-5-1": (10, 50, 0.25), "claude-mythos-5-1": (10, 50, 0.25),
+    "claude-fable-5": (10, 50, 1.0), "claude-mythos-5": (10, 50, 1.0),
+    "claude-opus-5-5": (4, 20, 0.20), "claude-opus-5": (5, 25, 0.50),
+    "claude-opus-4-8": (5, 25, 0.50), "claude-opus-4-7": (5, 25, 0.50), "claude-opus-4-6": (5, 25, 0.50),
+    "claude-sonnet-5-5": (2, 10, 0.20), "claude-sonnet-5": (2, 10, 0.20), "claude-sonnet-4-6": (3, 15, 0.30),
+    "claude-haiku-5-5": (0.10, 0.50, 0.01), "claude-haiku-4-5": (1, 5, 0.10),
+}
+HAIKU_55_LONG = (0.50, 2.50, 0.05)  # Haiku 5.5 prompts over 100K input tokens
+FAST_MULTIPLIER = 2  # fast mode (Opus) bills 2x standard
+PREVIEW = 1200  # chars of a tool's input / output kept for the waterfall
+_full_cache = {}  # transcript -> (mtime, records)
+
+
+def call_cost(model, u):
+    """Dollars for one model call from its usage record, at list price."""
+    key = max((k for k in PRICES if (model or "").startswith(k)), key=len, default=None)
+    if not key:
+        return None
+    inp, out, read = PRICES[key]
+    cached = u.get("cache_creation") or {}
+    write_1h = cached.get("ephemeral_1h_input_tokens", 0)
+    write_5m = u.get("cache_creation_input_tokens", 0) - write_1h
+    prompt = u.get("input_tokens", 0) + u.get("cache_read_input_tokens", 0) + u.get("cache_creation_input_tokens", 0)
+    if key == "claude-haiku-5-5" and prompt > 100_000:
+        inp, out, read = HAIKU_55_LONG
+    dollars = (u.get("input_tokens", 0) * inp + u.get("output_tokens", 0) * out + u.get("cache_read_input_tokens", 0) * read
+               + write_5m * inp * 1.25 + write_1h * inp * 2) / 1e6
+    return dollars * (FAST_MULTIPLIER if u.get("speed") == "fast" else 1)
+
+
+def _all_records(path):
+    mtime = path.stat().st_mtime
+    hit = _full_cache.get(path)
+    if not hit or hit[0] != mtime:
+        hit = _full_cache[path] = (mtime, _records(path))
+    return hit[1]
+
+
+def _preview(value):
+    if isinstance(value, list):
+        value = "\n".join(b.get("text", "") if isinstance(b, dict) else str(b) for b in value)
+    text = value if isinstance(value, str) else json.dumps(value, indent=1, ensure_ascii=False)
+    return text if len(text) <= PREVIEW else text[:PREVIEW] + f"\n… ({len(text) - PREVIEW:,} more chars)"
+
+
+def _agent(path, records, name, kind, status, by_tool, now, detail):
+    """One agent transcript -> agent node whose children are its model calls and tool calls (detail)
+    or only its child agents (not detail). Child agents hang under the tool call that spawned them."""
+    calls, spans, tools, kids, prev_t = {}, [], {}, [], None
+    for e in records:
+        t = _epoch(e["timestamp"])
+        msg = e.get("message", {})
+        if e["type"] == "assistant":
+            mid = msg.get("id") or e.get("uuid")
+            c = calls.get(mid)
+            if not c:
+                c = calls[mid] = {"kind": "llm", "name": msg.get("model") or "model", "start": prev_t or t, "end": t}
+                spans.append(c)
+            c["end"], c["usage"] = t, msg.get("usage") or {}
+            for b in _blocks(e):
+                if b.get("type") != "tool_use":
+                    continue
+                span = {"kind": "tool", "name": b.get("name"), "label": _tool_label(b), "start": t, "end": None, "children": []}
+                if detail:
+                    span["input"] = _preview(b.get("input"))
+                tools[b.get("id")] = span
+                spans.append(span)
+                child = by_tool.get(b.get("id"))
+                if child:
+                    meta = load_json(child.with_suffix(".meta.json"))
+                    node = _agent(child, _all_records(child), meta.get("description") or child.stem, meta.get("agentType") or "agent",
+                                  subagent_row(child)["status"], by_tool, now, detail)
+                    span["children"].append(node)
+                    kids.append(node)
+        else:
+            for b in _blocks(e):
+                span = tools.get(b.get("tool_use_id")) if b.get("type") == "tool_result" else None
+                if span and span["end"] is None:
+                    span["end"], span["error"] = t, bool(b.get("is_error"))
+                    if detail:
+                        span["output"] = _preview(b.get("content"))
+        prev_t = t
+    for span in tools.values():
+        if span["end"] is None:
+            span["end"], span["open"] = (now, True) if status == "running" else (prev_t, False)
+    models = {}
+    for c in calls.values():
+        u = c.pop("usage")
+        c["tokens_in"] = u.get("input_tokens", 0) + u.get("cache_read_input_tokens", 0) + u.get("cache_creation_input_tokens", 0)
+        c["tokens_out"] = u.get("output_tokens", 0)
+        c["cache_read"] = u.get("cache_read_input_tokens", 0)
+        c["cost"] = call_cost(c["name"], u)
+        models[c["name"]] = models.get(c["name"], 0) + 1
+    own = sum(c["cost"] or 0 for c in calls.values())
+    start = _epoch(records[0]["timestamp"]) if records else now
+    node = {"kind": "agent", "name": name, "type": kind, "status": status,
+            "model": max(models, key=models.get) if models else None,
+            "start": start, "end": now if status == "running" else (prev_t or start),
+            "calls": len(calls), "tools": len(tools), "cost_own": own, "cost": own + sum(k["cost"] for k in kids),
+            "unpriced": sorted(m for m in models if call_cost(m, {}) is None),
+            "tokens_in": sum(c["tokens_in"] for c in calls.values()), "tokens_out": sum(c["tokens_out"] for c in calls.values()),
+            "children": sorted(spans, key=lambda s: s["start"]) if detail else kids}
+    return node
+
+
+def trace(surface, scope="turn", running=False):
+    """scope=turn: the current turn with every model and tool call (waterfall).
+    scope=session: the whole session, agents only (tree with rolled-up cost).
+    running comes from the map's status (hook events), which the transcript alone can't tell."""
+    sess = agent_sessions().get(surface) or {}
+    path = Path(sess.get("transcript") or "")
+    if not path.is_file():
+        return {"error": "no Claude transcript for this tab"}
+    now = time.time()
+    records = _all_records(path)
+    if scope == "turn":
+        turn = max((i for i, e in enumerate(records) if _is_prompt(e)), default=0)
+        records = records[turn:]
+    start = _epoch(records[0]["timestamp"]) if records else now
+    folder = path.with_suffix("") / "subagents"
+    by_tool = {}
+    for p in folder.glob("agent-*.jsonl") if folder.is_dir() else []:
+        if scope == "turn" and p.stat().st_mtime < start:
+            continue
+        tid = load_json(p.with_suffix(".meta.json")).get("toolUseId")
+        if tid:
+            by_tool[tid] = p
+    root = _agent(path, records, "main session", "session", "running" if running else "done", by_tool, now, scope == "turn")
+    return {"scope": scope, "start": start, "now": now, "prompt": plain(_user_text(records[0]))[:140] if records else "", "root": root}
+
+
 def agent_sessions():
     """surface_id -> {agent, lifecycle, recap, cwd, updated, pid} for Claude and agy."""
     out = {}
@@ -734,6 +869,9 @@ class Handler(BaseHTTPRequestHandler):
             except (subprocess.SubprocessError, json.JSONDecodeError, KeyError, RuntimeError) as e:
                 print(f"{time.strftime('%H:%M:%S')} action failed: {e!r}"[:400], flush=True)
                 return self._send(502, {"error": repr(e)[:300]})
+        elif self.path.startswith("/api/trace?surface="):
+            q = dict(kv.split("=", 1) for kv in self.path.split("?", 1)[1].split("&") if "=" in kv)
+            self._send(200, trace(q["surface"], "session" if q.get("scope") == "session" else "turn", q.get("running") == "1"))
         elif self.path.startswith("/api/timeline?surface="):
             self._send(200, timeline(self.path.split("=", 1)[1]))
         elif self.path in ("/", "/index.html"):

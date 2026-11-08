@@ -104,6 +104,44 @@
   .seg.open { animation: pulse 1.4s ease-in-out infinite; }
   .tl-legend { display: flex; gap: 14px; margin-top: 14px; color: var(--muted); font-size: 11px; }
   .tl-legend i { display: inline-block; width: 18px; height: 8px; border-radius: 2px; margin-right: 5px; vertical-align: middle; }
+  /* Drawer tabs + trace views (waterfall, agent tree) */
+  .tl-tabs { display: flex; gap: 4px; margin: 8px 0 10px; }
+  .tl-tabs button, .tl-scope button { background: var(--bg); color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 3px 10px; font: inherit; cursor: pointer; }
+  .tl-tabs button.on, .tl-scope button.on { color: var(--text); border-color: var(--working); }
+  .tl-scope { display: flex; gap: 4px; margin-bottom: 10px; }
+  .wf { display: grid; grid-template-columns: minmax(220px, 34%) 1fr 58px 96px 62px; column-gap: 8px; row-gap: 2px; align-items: center; }
+  .wf-h { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; padding-bottom: 4px; }
+  .wf-h.r, .wf .r { text-align: right; }
+  .wf-row { display: contents; cursor: pointer; }
+  .wf-row:hover > div { background: rgba(255,255,255,.03); }
+  .wf-name { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 2px 0; }
+  .wf-name .caret { display: inline-block; width: 12px; color: var(--muted); }
+  .wf-name .k { color: var(--muted); }
+  .wf-name.agent { font-weight: 600; }
+  .wf-num { font-size: 11px; color: var(--muted); white-space: nowrap; }
+  .wf-bar { position: relative; height: 14px; }
+  .wf-bar i { position: absolute; top: 3px; bottom: 3px; min-width: 2px; border-radius: 2px; }
+  .wf-bar i.llm { background: var(--working); }
+  .wf-bar i.tool { background: var(--tool); }
+  .wf-bar i.fail { background: var(--danger); }
+  .wf-gap { position: absolute; top: 0; bottom: 0; width: 0; border-left: 1px dashed var(--line); }
+  .wf-bar i.agent { background: var(--done); opacity: .35; top: 1px; bottom: 1px; }
+  .wf-bar i.open { animation: pulse 1.4s ease-in-out infinite; }
+  .wf-slow { color: var(--waiting); font-size: 10px; margin-left: 6px; }
+  .wf-detail { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 2px 0 8px; }
+  .wf-detail pre { margin: 0; max-height: 260px; overflow: auto; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 6px 8px; font: 11px/1.4 ui-monospace, Menlo, monospace; white-space: pre-wrap; word-break: break-word; }
+  .wf-detail .hint { margin-bottom: 2px; }
+  .at { list-style: none; margin: 0; padding: 0; }
+  .at .at { margin-left: 18px; padding-left: 10px; border-left: 1px solid var(--line); }
+  .at-card { display: grid; grid-template-columns: 14px 1fr auto; gap: 2px 8px; align-items: baseline; padding: 6px 8px; margin: 4px 0; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; cursor: pointer; }
+  .at-card .caret { color: var(--muted); }
+  .at-card .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .at-card .t b { margin-right: 6px; }
+  .at-card .c { font-weight: 600; white-space: nowrap; }
+  .at-card .m { grid-column: 2 / -1; color: var(--muted); font-size: 11px; }
+  .at-card.running .dot { background: var(--working); animation: pulse 1.4s ease-in-out infinite; }
+  .at-card.done .dot { background: var(--done); }
+  .at-card.stopped .dot { background: var(--idle); }
   .session .recap.ask { color: var(--text); }
   /* Reply view: one session blown up over the dimmed map */
   #peek { position: fixed; inset: 0; z-index: 7; background: var(--scrim); display: flex; align-items: center; justify-content: center; padding: 24px 16px; }
@@ -519,17 +557,33 @@ function laneEl(t) {
 const tl = document.getElementById("tl");
 let tlSession = null;
 const KIND = { model: "model generating", tool: "tool call", agents: "waiting on background agents", you: "waiting on you" };
-function openTimeline(t) { tlSession = t; tl.hidden = false; tl.replaceChildren(el("div", "tl-prompt", "loading…")); loadTimeline(); }
+const VIEWS = { timeline: "Timeline", waterfall: "Waterfall", agents: "Agents" };
+let tlView = "timeline", tlScope = "session";
+try { tlView = VIEWS[localStorage.getItem("tlView")] ? localStorage.getItem("tlView") : "timeline"; tlScope = localStorage.getItem("tlScope") === "turn" ? "turn" : "session"; } catch (e) { /* storage blocked: defaults */ }
+const folded = new Set(), opened = new Set(), unfolded = new Set();  // survive the 3s refresh; unfolded = sub-agents opened in the waterfall
+function remember(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* storage blocked: not remembered */ } }
+function drawerHead(t, subtitle) {
+  const head = el("div", "tl-head"), x = el("span", "x", "×");
+  x.onclick = closeTimeline;
+  head.append(el("b", null, t.title), el("span", "hint", subtitle + " · Esc closes"), x);
+  const tabs = el("div", "tl-tabs");
+  Object.entries(VIEWS).forEach(([k, label]) => {
+    const b = el("button", k === tlView ? "on" : null, label);
+    b.onclick = () => { tlView = k; remember("tlView", k); tl.replaceChildren(head, tabs, el("div", "tl-prompt", "loading…")); loadTimeline(); };
+    tabs.append(b);
+  });
+  return [head, tabs];
+}
+function openTimeline(t) { tlSession = t; tl.hidden = false; folded.clear(); opened.clear(); unfolded.clear(); tl.replaceChildren(el("div", "tl-prompt", "loading…")); loadTimeline(); }
 function closeTimeline() { tlSession = null; tl.hidden = true; }
 document.addEventListener("keydown", e => { if (e.key === "Escape" && tlSession) closeTimeline(); });
 async function loadTimeline() {
   if (!tlSession) return;
+  if (tlView !== "timeline") return loadTrace();
   const t = tlSession, d = await (await fetch("/api/timeline?surface=" + encodeURIComponent(t.id))).json();
-  if (tlSession !== t) return;
-  const head = el("div", "tl-head"), x = el("span", "x", "×");
-  x.onclick = closeTimeline;
-  head.append(el("b", null, t.title), el("span", "hint", "current turn · Esc closes"), x);
-  if (d.error) { tl.replaceChildren(head, el("div", "tl-prompt", d.error)); return; }
+  if (tlSession !== t || tlView !== "timeline") return;
+  const head = drawerHead(t, "current turn");
+  if (d.error) { tl.replaceChildren(...head, el("div", "tl-prompt", d.error)); return; }
   const end = Math.max(d.active_end, d.start + 5), width = end - d.start;
   const tail = d.lanes[0].segments.find(s => s.kind === "you" && s.open);
   const sum = el("div", "tl-sum");
@@ -566,16 +620,157 @@ async function loadTimeline() {
   });
   const legend = el("div", "tl-legend");
   Object.entries(KIND).forEach(([k, label]) => { const s = el("span"), i = el("i", "seg " + k); i.style.position = "static"; s.append(i, label); legend.append(s); });
-  const parts = [head, el("div", "tl-prompt", "“" + d.prompt + "”"), sum];
+  const parts = [...head, el("div", "tl-prompt", "“" + d.prompt + "”"), sum];
   if (d.slowest.length) parts.push(el("div", "hint", "slowest steps"), slow);
   parts.push(grid, legend);
   if (tail && tail.start < d.now - width) parts.push(el("div", "hint", `axis stops at the last activity; your-turn time (${dur(d.now - tail.start)}) is not drawn to scale`));
   tl.replaceChildren(...parts);
 }
+// Waterfall (current turn: every model call and tool call, nested under the agent that made it)
+// and Agents (who started whom, cost rolled up each branch). Costs are list-price estimates.
+function money(v) { return v == null ? "?" : v < 0.01 ? "<$0.01" : "$" + v.toFixed(v < 10 ? 2 : 0); }
+function toks(n) { return n >= 1e6 ? (n / 1e6).toFixed(1) + "M" : n >= 1e3 ? Math.round(n / 1e3) + "k" : String(n); }
+function short(m) { return (m || "").replace(/^claude-/, ""); }
+function keyOf(n) { return n.kind + "|" + n.start + "|" + (n.label || n.name); }
+async function loadTrace() {
+  const t = tlSession, view = tlView, scope = view === "waterfall" ? "turn" : tlScope;
+  const d = await (await fetch(`/api/trace?surface=${encodeURIComponent(t.id)}&scope=${scope}&running=${t.status === "working" ? 1 : 0}`)).json();
+  if (tlSession !== t || tlView !== view) return;
+  const head = drawerHead(t, scope === "turn" ? "current turn" : "whole session");
+  if (d.error) { tl.replaceChildren(...head, el("div", "tl-prompt", d.error)); return; }
+  const keep = tl.scrollTop;
+  tl.replaceChildren(...head, ...(view === "waterfall" ? waterfall(d) : agentTree(d)));
+  tl.scrollTop = keep;
+}
+function traceSummary(d, r) {
+  const sum = el("div", "tl-sum");
+  const kv = (k, v) => { const s = el("span"); s.append(el("span", "k", k + " "), el("b", null, v)); sum.append(s); };
+  let agents = 0, calls = 0, tools = 0, tin = 0, tout = 0, unpriced = new Set();
+  (function walk(n) { if (n.kind === "agent") { agents++; calls += n.calls; tools += n.tools; tin += n.tokens_in; tout += n.tokens_out; n.unpriced.forEach(m => unpriced.add(m)); }
+    n.children.forEach(c => c.kind === "agent" ? walk(c) : (c.children || []).forEach(walk)); })(r);
+  kv("cost", money(r.cost)); kv("took", dur(r.end - r.start)); kv("model calls", String(calls)); kv("tool calls", String(tools));
+  if (agents > 1) kv("sub-agents", String(agents - 1));
+  kv("tokens", toks(tin) + " in / " + toks(tout) + " out");
+  const notes = [el("div", "hint", "cost = list-price estimate from token counts" + (unpriced.size ? "; no price for " + [...unpriced].join(", ") : ""))];
+  return [sum, ...notes];
+}
+const IDLE_GAP = 30;  // seconds: idle stretches longer than this are drawn as IDLE_GAP wide, marked with a dashed line
+function squeeze(steps, from) {
+  // Busy = any model or tool call. Returns x(t) in squeezed seconds, the squeezed total, gap marks and active seconds.
+  const busy = steps.map(s => [Math.max(s.start, from), s.end]).filter(([a, b]) => b > a).sort((a, b) => a[0] - b[0]);
+  const merged = [];
+  busy.forEach(([a, b]) => { const m = merged[merged.length - 1]; if (m && a <= m[1]) m[1] = Math.max(m[1], b); else merged.push([a, b]); });
+  const knots = [[from, 0]], gaps = [];
+  let cur = from, x = 0, active = 0;
+  merged.forEach(([a, b]) => {
+    const idle = a - cur;
+    if (idle > IDLE_GAP) { x += IDLE_GAP; gaps.push(x - IDLE_GAP / 2); } else x += Math.max(0, idle);
+    knots.push([a, x]); x += b - a; active += b - a; knots.push([b, x]); cur = b;
+  });
+  const at = t => {
+    if (t <= from) return 0;
+    for (let i = 1; i < knots.length; i++) {
+      const [t0, x0] = knots[i - 1], [t1, x1] = knots[i];
+      if (t <= t1) return t1 === t0 ? x1 : x0 + (t - t0) / (t1 - t0) * (x1 - x0);
+    }
+    return x;  // after the last busy stretch: open-ended spans stop at the axis end
+  };
+  return { at, total: Math.max(x, 1), gaps, active };
+}
+function waterfall(d) {
+  const r = d.root;
+  let slowest = null;
+  const steps = [];
+  (function walk(n) { n.children.forEach(c => { if (c.kind === "agent") return walk(c);
+    steps.push(c); if (!slowest || c.end - c.start > slowest.end - slowest.start) slowest = c; (c.children || []).forEach(walk); }); })(r);
+  const axis = squeeze(steps, d.start), width = axis.total;
+  const grid = el("div", "wf");
+  ["step", "", "time", "tokens", "cost"].forEach((h, i) => grid.append(el("div", "wf-h" + (i > 1 ? " r" : ""), h)));
+  const bar = (n, cls) => {
+    const b = el("div", "wf-bar"), i = el("i", cls + (n.open ? " open" : ""));
+    const a = axis.at(n.start), z = axis.at(n.end);
+    i.style.left = (a / width * 100) + "%";
+    i.style.width = (Math.max(0, z - a) / width * 100) + "%";
+    axis.gaps.forEach(g => { const m = el("span", "wf-gap"); m.style.left = (g / width * 100) + "%"; b.append(m); });
+    b.append(i); return b;
+  };
+  const row = (n, depth, label, cls, numbers, onclick) => {
+    const r = el("div", "wf-row"), name = el("div", "wf-name " + n.kind);
+    name.style.paddingLeft = (depth * 14) + "px";
+    name.append(...label);
+    if (n === slowest) name.append(el("span", "wf-slow", "slowest"));
+    name.title = n.label || n.name;
+    r.append(name, bar(n, cls), el("div", "wf-num r", dur(n.end - n.start)), ...numbers);
+    r.onclick = onclick; grid.append(r);
+  };
+  (function walk(a, depth) {
+    const k = keyOf(a), isOpen = depth === 0 ? !folded.has(k) : unfolded.has(k);  // sub-agents start folded
+    const set = depth === 0 ? folded : unfolded, closing = depth === 0;
+    row(a, depth, [el("span", "caret", isOpen ? "▾" : "▸"), (a.type === "session" ? "main session" : a.type + ": " + a.name)], "agent",
+        [el("div", "wf-num r", toks(a.tokens_in) + "/" + toks(a.tokens_out)), el("div", "wf-num r", money(a.cost))],
+        () => { (isOpen === closing) ? set.add(k) : set.delete(k); loadTrace(); });
+    if (!isOpen) return;
+    a.children.forEach(c => {
+      if (c.kind === "llm") {
+        row(c, depth + 1, [el("span", "caret", ""), el("span", "k", "model "), short(c.name)], "llm",
+            [el("div", "wf-num r", toks(c.tokens_in) + "/" + toks(c.tokens_out)), el("div", "wf-num r", money(c.cost))], null);
+        return;
+      }
+      const ck = keyOf(c), show = opened.has(ck);
+      row(c, depth + 1, [el("span", "caret", show ? "▾" : "▸"), el("span", "k", "tool "), c.label], c.error ? "tool fail" : "tool",
+          [el("div", "wf-num r", ""), el("div", "wf-num r", "")], () => { show ? opened.delete(ck) : opened.add(ck); loadTrace(); });
+      if (show) {
+        const box = el("div", "wf-detail"), io = (h, v) => { const w = el("div"); w.append(el("div", "hint", h), el("pre", null, v ?? "(none yet)")); return w; };
+        box.append(io("input", c.input), io(c.error ? "error" : "output", c.output));
+        grid.append(box);
+      }
+      c.children.forEach(child => walk(child, depth + 2));
+    });
+  })(r, 0);
+  const legend = el("div", "tl-legend");
+  [["llm", "model call"], ["tool", "tool call"], ["fail", "failed tool call"], ["agent", "agent (whole run)"]].forEach(([k, label]) => {
+    const s = el("span"), i = el("i"); i.style.background = `var(--${{ llm: "working", tool: "tool", fail: "danger", agent: "done" }[k]})`; s.append(i, label); legend.append(s); });
+  const [sum, ...notes] = traceSummary(d, r);
+  const act = el("span"); act.append(el("span", "k", "active "), el("b", null, dur(axis.active))); sum.append(act);
+  const how = "click a tool call for its input and output · click an agent to open or fold it" + (axis.gaps.length ? ` · idle stretches over ${IDLE_GAP}s are squeezed (dashed lines)` : "");
+  return [el("div", "tl-prompt", "“" + d.prompt + "”"), sum, ...notes, el("div", "hint", how), grid, legend];
+}
+function agentTree(d) {
+  const scopes = el("div", "tl-scope");
+  [["session", "Whole session"], ["turn", "This turn"]].forEach(([k, label]) => {
+    const b = el("button", k === tlScope ? "on" : null, label);
+    b.onclick = () => { tlScope = k; remember("tlScope", k); loadTrace(); };
+    scopes.append(b);
+  });
+  const kidsOf = a => a.children.filter(c => c.kind === "agent").concat(a.children.flatMap(c => c.kind === "tool" ? c.children : []));
+  const list = (agents) => {
+    const ul = el("ul", "at");
+    agents.sort((x, y) => x.start - y.start).forEach(a => {
+      const li = el("li"), kids = kidsOf(a), k = keyOf(a), isOpen = !folded.has(k);
+      const card = el("div", "at-card " + a.status);
+      const title = el("div", "t"); title.append(el("span", "dot"), el("b", null, a.type === "session" ? "main session" : a.type), a.type === "session" ? "" : a.name);
+      card.append(el("span", "caret", kids.length ? (isOpen ? "▾" : "▸") : ""), title,
+        el("span", "c", money(a.cost)),
+        el("div", "m", [a.status, short(a.model), dur(a.end - a.start), a.calls + " model calls", a.tools + " tool calls",
+          kids.length ? "own " + money(a.cost_own) + " · with sub-agents " + money(a.cost) : null].filter(Boolean).join(" · ")));
+      card.title = a.name;
+      if (kids.length) card.onclick = () => { isOpen ? folded.add(k) : folded.delete(k); loadTrace(); };
+      li.append(card);
+      if (kids.length && isOpen) li.append(list(kids));
+      ul.append(li);
+    });
+    return ul;
+  };
+  return [scopes, ...traceSummary(d, d.root), list([d.root])];
+}
 setInterval(loadTimeline, 3000);
 
 function render(state) {
   if (!state) return;
+  if (tlSession) {  // keep the open drawer's status current (the waterfall reads it to tell running from finished)
+    const fresh = state.regions.flatMap(r => r.sessions).find(x => x.id === tlSession.id);
+    if (fresh) tlSession.status = fresh.status;
+  }
   const parentOf = Object.fromEntries(state.edges.map(e => [e.child, e.parent]));
   const counts = { waiting: 0, done: 0, working: 0 };
   let subRunning = 0;
