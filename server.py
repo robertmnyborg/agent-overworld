@@ -6,7 +6,7 @@ Started by autostart.zsh from the first cmux shell (cmux's socket only accepts p
 While cmux is running, keeps a pinned "Overworld" workspace (browser pane on this server) in slot 1 (⌘1),
 and a pinned, ungrouped "Scratch" workspace in slot 2 for one-off sessions not yet worth their own workspace.
 """
-import hashlib, json, os, re, subprocess, threading, time, urllib.error, urllib.request
+import hashlib, json, os, re, shlex, subprocess, threading, time, urllib.error, urllib.request
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -100,6 +100,34 @@ def keep_workspace():
         except (subprocess.SubprocessError, json.JSONDecodeError, KeyError, IndexError) as e:
             print(f"ensure_workspace: {e!r}", flush=True)
         time.sleep(ENSURE_EVERY)
+
+
+_came = {"cur": None, "on_ow": False, "from": None}  # last tab focused outside the Overworld; the one focused when you switched to it
+
+
+def keep_came_from():
+    """Every second, note which tab has focus. On a switch into the Overworld, the tab you left is `from`, so the page can light it."""
+    while True:
+        try:
+            tree = json.loads(cmux("--json", "--id-format", "both", "tree") or "{}")
+            for window in tree.get("windows", []):
+                if not window.get("active"):
+                    continue
+                ws = next((w for w in window["workspaces"] if w.get("selected")), None)
+                if not ws:
+                    continue
+                if ws["title"] == "Overworld":
+                    if not _came["on_ow"] and _came["cur"]:
+                        _came["from"] = {"id": _came["cur"], "at": time.time()}
+                    _came["on_ow"] = True
+                else:
+                    _came["on_ow"] = False
+                    sf = next((sf for p in ws["panes"] if p.get("focused") for sf in p["surfaces"] if sf.get("selected_in_pane")), None)
+                    if sf:
+                        _came["cur"] = sf["id"]
+        except (subprocess.SubprocessError, json.JSONDecodeError, KeyError) as e:
+            print(f"keep_came_from: {e!r}", flush=True)
+        time.sleep(1)
 
 
 def focus(workspace, surface):
@@ -804,7 +832,7 @@ def agent_sessions():
         cur = out.get(s["surfaceId"])
         if cur is None or (s.get("updatedAt") or 0) > (cur.get("updated") or 0):
             prompts, text, turn_at, turn_role = agy_turns(s.get("transcriptPath"))
-            out[s["surfaceId"]] = {"agent": "agy", "lifecycle": s.get("agentLifecycle"), "recap": text,
+            out[s["surfaceId"]] = {"agent": "agy", "lifecycle": s.get("agentLifecycle"), "recap": text, "transcript": s.get("transcriptPath"),
                                    "cwd": s.get("cwd"), "updated": s.get("updatedAt"), "pid": s.get("pid"),
                                    "turn_at": turn_at, "turn_role": turn_role, "prompts": prompts}
     return out
@@ -1126,13 +1154,663 @@ def state():
                                   "full": sess.get("full", "") if sess else "",
                                   "action": cached_action(sess.get("full", "")) if sess else None, "subagents": lane, "subagents_more": more,
                                   "agent": sess["agent"] if sess else None,
-                                  "cwd": sess["cwd"] if sess else None,
+                                  "cwd": sess["cwd"] if sess else None, "transcript": sess.get("transcript") if sess else None,
+                                  "ws_ref": ws["ref"],
                                   "updated": sess["updated"] if sess else None,
                                   "here": sf.get("selected_in_pane") and pane.get("focused") and ws.get("selected")})
             if sessions:
                 regions.append({"id": ws["id"], "title": ws["title"], "group": group_of.get(ws["ref"]), "sessions": sessions,
                             "scratch": ws["title"] == SCRATCH})
-    return {"regions": regions, "groups": [{"id": g["ref"], "name": g["name"]} for g in groups], "edges": edges, "at": time.time()}
+    return {"regions": regions, "groups": [{"id": g["ref"], "name": g["name"]} for g in groups], "edges": edges, "at": time.time(),
+            "came_from": _came["from"]}
+
+
+CAPTURES = Path.home() / ".overworld" / "captures"  # one brief per new capture; the session reads it as its first prompt
+THREADS = Path.home() / ".overworld" / "threads.json"  # Slack thread key -> surface that owns it
+SLACK_LINK = re.compile(r"https://[\w-]+\.slack\.com/archives/(\w+)/p(\d{10})(\d{6})(\S*)")
+SENDER_STEP = ("Once you have read the source, record who is asking (their name as written in Slack, email or Jira), unless the note is "
+               "Robert's own idea with no one asking: curl -s -X POST http://127.0.0.1:7717/api/work/sender -d "
+               "\"{\\\"surface\\\": \\\"$CMUX_SURFACE_ID\\\", \\\"person\\\": \\\"<Name>\\\", \\\"ask\\\": \\\"<what they want, max 12 words>\\\"}\"")
+CAPTURE_RULES = """# Quick capture {at}
+
+Robert sent this with the capture hotkey:
+
+> {text}
+
+1. If the note has a Slack, Gmail, or Jira link, read the source first with your connector. For Slack, read the whole thread, plus the channel from that message onward
+   (at least 20 messages or 24 hours), because replies are often unthreaded.
+   If it names a screenshot file, open it with Read first.
+2. File this tab, always, even when the note says to do nothing else. Groups (Work, Personal) are folders, not workspaces:
+   never move a tab into a group itself, only into a workspace listed under it.
+   a. A workspace below fits: move there.
+   b. None fits, but the work clearly belongs to a group: create a new workspace in that group, named for the work (2-4 words), and move there:
+      cmux new-workspace --group "<group ref>" --name "<name>" --focus false   (prints the new workspace ref)
+   c. Neither: stay in Scratch.
+   Then run:
+   cmux move-surface --surface "$CMUX_SURFACE_ID" --workspace "<workspace ref>" --focus false
+   cmux rename-tab --surface "$CMUX_SURFACE_ID" "<2-4 word title>"
+   Never rename a workspace or group.
+3. {sender}
+4. Do what the note asks. If it asks for nothing specific, summarize the source in 3 lines and say what you would do next.
+   Never post to Slack, email, or Jira without Robert's yes for that post.
+
+Workspaces by group (ref | title | tabs):
+{workspaces}
+"""
+
+
+def slack_thread(text):
+    """Slack link -> 'slack:<channel>:<thread ts>'. A reply link carries thread_ts; a top-level link's own ts is the thread."""
+    m = SLACK_LINK.search(text)
+    if not m:
+        return None
+    reply = re.search(r"thread_ts=(\d+\.\d+)", m.group(4))
+    return f"slack:{m.group(1)}:{reply.group(1) if reply else m.group(2) + '.' + m.group(3)}"
+
+
+def capture_listing(tree):
+    """Workspaces grouped under their group header, with group anchors (the folder itself) left out so a session can't file into one."""
+    groups = json.loads(cmux("workspace-group", "list", "--json") or '{"groups": []}')["groups"]
+    anchors = {g["anchor_workspace_ref"] for g in groups if g["anchor_workspace_is_generated"]}
+    group_of = {ref: g for g in groups for ref in g["member_workspace_refs"]}
+    sections = {g["ref"]: [f"## Group {g['name']} (group ref {g['ref']})"] for g in groups}
+    loose = ["## Not in a group"]
+    for w in tree["windows"]:
+        for ws in w["workspaces"]:
+            if ws["title"] == "Overworld" or ws["ref"] in anchors:
+                continue
+            line = f"{ws['ref']} | {ws['title']} | " + ", ".join(sf["title"] for p in ws["panes"] for sf in p["surfaces"])
+            g = group_of.get(ws["ref"])
+            (sections[g["ref"]] if g else loose).append(line)
+    return "\n".join("\n".join(lines) for lines in [*sections.values(), loose])
+
+
+def capture(text, route=True):
+    """New note -> the tab that owns its Slack thread, else the work item it matches, else a new Claude tab in Scratch that
+    files itself. route=False skips both matches (used when Robert says a routing was wrong and wants a fresh tab)."""
+    key = slack_thread(text)
+    threads = json.loads(THREADS.read_text()) if THREADS.exists() else {}
+    tree = json.loads(cmux("--json", "--id-format", "both", "tree", "--all"))
+    surfaces = {sf["id"]: (ws, sf) for w in tree["windows"] for ws in w["workspaces"] for p in ws["panes"] for sf in p["surfaces"]}
+    owner = threads.get(key) if key and route else None
+    if owner in surfaces:
+        ws, sf = surfaces[owner]
+        out = subprocess.run([CMUX, "paste", "--workspace", ws["id"], "--surface", owner, "--submit", "-"],
+                             input=f"Follow-up capture on this same Slack thread: {text}\nRe-read the thread and the channel after it for anything new, then continue.",
+                             capture_output=True, text=True, timeout=10, env={**os.environ, "CMUX_QUIET": "1"})
+        if out.returncode:
+            raise RuntimeError(f"could not send to {sf['title']}: {out.stderr.strip()[:200]}")
+        w = load_work()
+        it = next((i for i in w["items"].values() if any(m.get("workspace") == ws["id"] and m.get("title") == sf["title"] for m in i.get("meta", {}).values())), None)
+        return {"routed": "continued", "message": f"Sent to {ws['title']} / {sf['title']} (same Slack thread)", "reason": "same Slack thread",
+                "surface": owner, "workspace": ws["id"], "item": it and it["id"], "item_title": it and it["title"], "key": key}
+    item, reason = route_capture(text, key) if route else (None, "")
+    if item:
+        return {**deliver_to_item(item, text, key), "reason": reason, "item": item["id"], "item_title": item["title"], "key": key}
+    scratch = next(ws for w in tree["windows"] for ws in w["workspaces"] if ws["title"] == SCRATCH)
+    listing = capture_listing(tree)
+    CAPTURES.mkdir(parents=True, exist_ok=True)
+    brief = CAPTURES / f"{time.strftime('%Y-%m-%d-%H%M%S')}.md"
+    brief.write_text(CAPTURE_RULES.format(at=time.strftime("%Y-%m-%d %H:%M"), text=text.replace("\n", "\n> "), workspaces=listing, sender=SENDER_STEP))
+    out = cmux("--id-format", "uuids", "new-surface", "--workspace", scratch["id"], "--working-directory", str(Path.home()),
+               "--command", f'{NEW_SESSION_COMMAND} "Read {brief} and follow it."', "--focus", "false")
+    surface = re.search(r"[0-9A-F]{8}-[0-9A-F-]{27}", out)
+    if not surface:
+        raise RuntimeError(f"new-surface gave no surface id: {out[:200]}")
+    cmux("rename-tab", "--workspace", scratch["id"], "--surface", surface.group(0), "--",
+         "Capture: " + (re.sub(r"https?://\S+|Screenshot: \S+", "", text).strip()[:30] or ("Slack thread" if key else "link")))
+    if key:
+        threads[key] = surface.group(0)
+        THREADS.write_text(json.dumps(threads, indent=1))
+    print(f"{time.strftime('%H:%M:%S')} capture: {key or 'note'} -> {surface.group(0)} ({brief.name})", flush=True)
+    return {"routed": "new", "message": "No work item matched: started a new tab. It will file itself.", "surface": surface.group(0),
+            "workspace": scratch["id"], "reason": "no work item matched" if route else "you asked for a new tab", "key": key}
+
+
+# ---------- Work items: the durable unit of work; tabs are disposable workers attached to one ----------
+WORK = Path.home() / ".overworld" / "work.json"
+_work_lock = threading.RLock()
+SORT_EVERY = 30  # seconds between passes that attach new tabs to work items
+SEED_TIMEOUT = 240
+WORK_ITEM = {"type": "object", "required": ["key", "title", "goal", "people", "group"], "properties": {
+    "key": {"type": "string"}, "title": {"type": "string"}, "goal": {"type": "string"}, "group": {"type": "string"},
+    "people": {"type": "array", "items": {"type": "string"}}}}
+SORT_SCHEMA = {"type": "object", "required": ["new_items", "assign"], "properties": {
+    "new_items": {"type": "array", "items": WORK_ITEM},
+    "assign": {"type": "array", "items": {"type": "object", "required": ["tab", "item"], "properties": {
+        "tab": {"type": "string"}, "item": {"type": "string"}}}}}}
+SORT_RULES = """Robert runs many AI agent sessions (tabs). Group them into WORK ITEMS. A work item is one piece of work with an outcome
+someone cares about: a deliverable, a decision, a fix, a person's request. It outlives any single tab.
+- Put tabs in the same item when they serve the same outcome, even if they sit in different workspaces or use different words.
+- Keep items apart when the outcomes differ, even if the topic is related (a pricing doc and a pricing bug are two items).
+- A person is NOT an item by themselves. Work for or about a person is an item named for that work; list the person in people.
+- Existing items are given with ids. Prefer an existing item; create a new item only when no existing one fits.
+- title: 2-5 words, the outcome, Title Case, concrete nouns. goal: one sentence, what done looks like. people: first names
+  (or names as written) of people the work is for, waits on, or involves; [] if none. Never list Robert.
+- new_items keys: "n1", "n2", ... Every tab key given must appear exactly once in assign, with an existing item id or a new key.
+- group: the id of the goal group (given, if any) that a new item serves, or "" if none fits or none are given.
+Input:
+"""
+PARK_SCHEMA = {"type": "object", "required": ["note", "next", "waits_on"], "properties": {
+    "note": {"type": "string"}, "next": {"type": "string"}, "waits_on": {"type": "string"}}}
+PARK_RULES = """Robert is parking a piece of work: its agent tabs will close and he will come back to it later, possibly weeks later.
+From the item and the end of each tab's conversation, write what he needs to pick it up cold.
+- note: where it stands, max 2 sentences. Name artifacts (PR numbers, doc titles, branches) and numbers from the conversation.
+- next: the next step as one imperative sentence, max 20 words, naming who does it.
+- waits_on: "Robert" if the next step is his, a person's name if it waits on them, or "nobody" if the work is finished.
+Plain words, no markdown, no quotes. Input:
+"""
+ROUTE_SCHEMA = {"type": "object", "required": ["item", "confident", "reason"], "properties": {
+    "item": {"type": "string"}, "confident": {"type": "boolean"}, "reason": {"type": "string"}}}
+ROUTE_RULES = """Robert captured a note (often a Slack link plus a few words). Pick the work item it belongs to.
+Return item = that item's id, or "new" when no item clearly fits. confident = true only when the note plainly continues that item's
+work (same deliverable, same person asking about the same thing). Related topic alone is not enough.
+reason: why, max 10 words, naming the shared person or deliverable (e.g. "Chace asking about the same OPTECH reports"). Input:
+"""
+
+
+def model_call(rules, payload, schema, model="haiku", timeout=NAME_TIMEOUT):
+    """One headless structured call (no tools, settings or MCP). Returns (structured output, cost)."""
+    cmd = [*NAMER, "--json-schema", json.dumps(schema)]
+    cmd[cmd.index("--model") + 1] = model
+    out = subprocess.run(cmd, input=rules + json.dumps(payload, indent=1), capture_output=True, text=True, timeout=timeout,
+                         cwd="/tmp", env={**os.environ, "MAX_THINKING_TOKENS": "0"})
+    result = json.loads(out.stdout)
+    if result.get("is_error"):
+        raise RuntimeError(result.get("result", "model call failed"))
+    return result["structured_output"], result.get("total_cost_usd") or 0
+
+
+def load_work():
+    return json.loads(WORK.read_text()) if WORK.exists() else {"seeded": False, "items": {}, "skip": [], "proposal": None}
+
+
+def save_work(w):
+    tmp = WORK.with_suffix(".tmp")
+    tmp.write_text(json.dumps(w, indent=1))
+    tmp.replace(WORK)
+
+
+def new_id():
+    return "w" + hashlib.sha1(f"{time.time()}{os.urandom(4)}".encode()).hexdigest()[:8]
+
+
+def live_tabs(st):
+    """transcript -> session dict, for every agent tab on the map with a transcript."""
+    return {t["transcript"]: t for r in st["regions"] for t in r["sessions"] if t.get("agent") and t.get("transcript")}
+
+
+def tab_brief(t):
+    prompts = recent_prompts(t["transcript"]) if t["agent"] == "claude" else agy_turns(t["transcript"])[0]
+    return {"title": t["title"], "status": t["status"], "recent_prompts": prompts, "last_reply": (t.get("recap") or "")[:300]}
+
+
+def remember_tab(item, t, regions_by_ws):
+    item.setdefault("meta", {})[t["transcript"]] = {
+        "title": t["title"], "workspace": t["workspace"], "workspace_title": regions_by_ws.get(t["workspace"], ""),
+        "cwd": t.get("cwd"), "agent": t["agent"], "seen": time.time()}
+
+
+def owner_of(w, transcript):
+    return next((i for i in w["items"].values() if transcript in i["sessions"]), None)
+
+
+def thread_keys_for(surface):
+    threads = json.loads(THREADS.read_text()) if THREADS.exists() else {}
+    return [k for k, v in threads.items() if v == surface]
+
+
+def sort_tabs(tabs, items, model="haiku", timeout=NAME_TIMEOUT):
+    """tabs: [session dict]. items: existing items. -> (new items by key, {transcript: item id or new key}, cost)."""
+    keyed = {f"t{i}": t for i, t in enumerate(tabs)}
+    groups = load_work().get("groups", {})
+    payload = {"existing_items": [{"id": i["id"], "title": i["title"], "goal": i["goal"], "people": i["people"]} for i in items],
+               "goal_groups": [{"id": g["id"], "title": g["title"]} for g in groups.values()],
+               "tabs": {k: tab_brief(t) for k, t in keyed.items()}}
+    out, cost = model_call(SORT_RULES, payload, SORT_SCHEMA, model=model, timeout=timeout)
+    new = {n["key"]: n for n in out["new_items"]}
+    valid = {i["id"] for i in items} | set(new)
+    assign = {keyed[a["tab"]]["transcript"]: a["item"] for a in out["assign"] if a["tab"] in keyed and a["item"] in valid}
+    return new, assign, cost
+
+
+def seed_work():
+    """Cluster every agent tab into proposed work items for Robert to review. Nothing is written as an item yet."""
+    st = state()
+    tabs = list(live_tabs(st).values())
+    new, assign, cost = sort_tabs(tabs, [], model="sonnet", timeout=SEED_TIMEOUT)
+    by_t = {t["transcript"]: t for t in tabs}
+    proposal = [{**n, "tabs": [tr for tr, k in assign.items() if k == key]} for key, n in new.items()]
+    proposal = [p for p in proposal if p["tabs"]]
+    unsorted = [tr for tr in by_t if tr not in assign]
+    with _work_lock:
+        w = load_work()
+        w["proposal"] = {"items": proposal, "unsorted": unsorted, "at": time.time(), "cost": cost}
+        save_work(w)
+    print(f"{time.strftime('%H:%M:%S')} work seed: {len(tabs)} tabs -> {len(proposal)} items, {len(unsorted)} unsorted, ${cost:.3f}", flush=True)
+    return w["proposal"]
+
+
+def accept_seed(items):
+    """items: [{title, goal, people, tabs: [transcript]}] as edited on the review screen."""
+    st = state()
+    live, ws_title = live_tabs(st), {r["id"]: r["title"] for r in st["regions"]}
+    with _work_lock:
+        w = load_work()
+        for p in items:
+            if not p["tabs"]:
+                continue
+            item = {"id": new_id(), "title": p["title"], "goal": p.get("goal", ""), "people": p.get("people", []), "sources": [],
+                    "state": "active", "note": "", "next": "", "waits_on": "", "sessions": [], "created": time.time(), "updated": time.time()}
+            for tr in p["tabs"]:
+                prev = owner_of(w, tr)
+                if prev:
+                    prev["sessions"].remove(tr)
+                item["sessions"].append(tr)
+                if tr in live:
+                    remember_tab(item, live[tr], ws_title)
+                    item["sources"] += thread_keys_for(live[tr]["id"])
+            w["items"][item["id"]] = item
+        w["seeded"], w["proposal"] = True, None
+        save_work(w)
+    return {"items": len(w["items"])}
+
+
+def keep_work():
+    """Background: attach tabs that are on no item (new captures, new tabs) to an item, or start a new one flagged "new"."""
+    tried = {}  # transcript -> prompt count when last sorted, so a failed or empty tab isn't re-sent every pass
+    while True:
+        time.sleep(SORT_EVERY)
+        try:
+            if not load_work()["seeded"]:
+                continue
+            st = state()
+            live, ws_title = live_tabs(st), {r["id"]: r["title"] for r in st["regions"]}
+            with _work_lock:
+                w = load_work()
+                for item in w["items"].values():  # keep each session's last known workspace, cwd and title for resume
+                    for tr in item["sessions"]:
+                        if tr in live:
+                            remember_tab(item, live[tr], ws_title)
+                save_work(w)
+                taken = {tr for i in w["items"].values() for tr in i["sessions"]} | set(w["skip"])
+            todo = []
+            for tr, t in live.items():
+                if tr in taken:
+                    continue
+                n = len(recent_prompts(tr)) if t["agent"] == "claude" else len(agy_turns(tr)[0])
+                if n and tried.get(tr) != n:
+                    tried[tr] = n
+                    todo.append(t)
+            if not todo:
+                continue
+            active = [i for i in w["items"].values() if i["state"] != "done"]
+            new, assign, cost = sort_tabs(todo, active)
+            with _work_lock:
+                w = load_work()
+                made = {}
+                avoid = w.get("avoid", {})  # surface -> item Robert moved a capture out of; never file that tab back there
+                for tr, target in assign.items():
+                    if owner_of(w, tr):
+                        continue  # attached by hand while the call ran
+                    if avoid.get(live[tr]["id"]) == target:
+                        key = "avoid:" + tr
+                        new[key] = {"title": live[tr]["title"], "goal": "", "people": [], "group": ""}
+                        target = key
+                    if target in new:
+                        if target not in made:
+                            n = new[target]
+                            made[target] = {"id": new_id(), "title": n["title"], "goal": n["goal"], "people": n["people"], "sources": [],
+                                            "state": "active", "note": "", "next": "", "waits_on": "", "sessions": [], "new": True,
+                                            "created": time.time(), "updated": time.time(),
+                                            "group": n["group"] if n.get("group") in w.get("groups", {}) else ""}
+                            w["items"][made[target]["id"]] = made[target]
+                        item = made[target]
+                    elif target in w["items"]:
+                        item = w["items"][target]
+                        if item["state"] == "parked":
+                            item["state"] = "active"  # a live tab came back to parked work
+                    else:
+                        continue
+                    item["sessions"].append(tr)
+                    remember_tab(item, live[tr], ws_title)
+                    item["sources"] = sorted(set(item["sources"]) | set(thread_keys_for(live[tr]["id"])))
+                    pend = w.get("pending_senders", {}).pop(live[tr]["id"], None)
+                    if pend:
+                        add_sender(item, pend)
+                    item["updated"] = time.time()
+                save_work(w)
+            print(f"{time.strftime('%H:%M:%S')} work sort: {len(todo)} tabs, {len(made)} new items, ${cost:.4f}", flush=True)
+        except (subprocess.SubprocessError, json.JSONDecodeError, KeyError, RuntimeError, OSError) as e:
+            print(f"{time.strftime('%H:%M:%S')} work sort failed: {e!r}"[:400], flush=True)
+
+
+def work_view(st):
+    """Items with their live tabs joined in (surface ids), for the page."""
+    w = load_work()
+    live = live_tabs(st)
+    rank = {"waiting": 0, "working": 1, "done": 2, "idle": 3, "shell": 4}
+    items = []
+    for i in w["items"].values():
+        tabs = [live[tr] for tr in i["sessions"] if tr in live]
+        statuses = [t["status"] for t in tabs]
+        roll = min(statuses, key=lambda s: rank.get(s, 9)) if statuses else "none"
+        waiting = [t for t in tabs if t["status"] == "waiting"]
+        nxt, needs = i["next"], False
+        if waiting:
+            a = waiting[0].get("action")
+            needs = not (a and a.get("kind") == "none")  # a finished reply that asks nothing isn't "needs you"
+            nxt = (a and a.get("action")) or waiting[0].get("ask") or nxt
+        items.append({k: i[k] for k in ("id", "title", "goal", "people", "state", "note", "waits_on", "updated")} |
+                     {"group": i.get("group", ""), "asked_by": i.get("asked_by", [])[-3:]} |
+                     {"next": nxt, "needs": needs, "tabs": [t["id"] for t in tabs], "status": roll, "new": i.get("new", False),
+                      "sessions": len(i["sessions"]), "resumable": any(m["agent"] == "claude" for m in i.get("meta", {}).values()),
+                      "where": sorted({m["workspace_title"] for m in i.get("meta", {}).values() if m.get("workspace_title")})})
+    taken = {tr for i in w["items"].values() for tr in i["sessions"]}
+    unsorted = [t["id"] for tr, t in live.items() if tr not in taken]
+    prop = w.get("proposal")
+    if prop:  # page needs tab ids and titles, not transcript paths
+        prop = {**prop, "items": [{**p, "tabs": [{"transcript": tr, "id": live[tr]["id"]} for tr in p["tabs"] if tr in live]} for p in prop["items"]],
+                "unsorted": [{"transcript": tr, "id": live[tr]["id"]} for tr in prop["unsorted"] if tr in live]}
+    groups = sorted(w.get("groups", {}).values(), key=lambda g: g.get("order", 0))
+    return {"seeded": w["seeded"], "items": items, "unsorted": unsorted, "proposal": prop, "groups": groups}
+
+
+def checked_cmux(*args):
+    out = subprocess.run([CMUX, *args], capture_output=True, text=True, timeout=10, env={**os.environ, "CMUX_QUIET": "1"})
+    if out.returncode:
+        raise RuntimeError(f"cmux {args[0]}: {(out.stderr or out.stdout).strip()[:200]}")
+    return out.stdout
+
+
+def park(item_id):
+    """Write where the work stands and its next step, then close its tabs. Transcripts stay, so it can be resumed."""
+    st = state()
+    live = live_tabs(st)
+    with _work_lock:
+        item = load_work()["items"][item_id]
+    tabs = [live[tr] for tr in item["sessions"] if tr in live]
+    payload = {"item": {"title": item["title"], "goal": item["goal"], "people": item["people"]},
+               "tabs": [{**tab_brief(t), "last_reply": (t.get("full") or t.get("recap") or "")[-3000:]} for t in tabs]}
+    if tabs:
+        out, cost = model_call(PARK_RULES, payload, PARK_SCHEMA)
+    else:
+        out, cost = {"note": item["note"], "next": item["next"], "waits_on": item["waits_on"]}, 0
+    with _work_lock:
+        w = load_work()
+        it = w["items"][item_id]
+        it.update(out, state="parked", updated=time.time(), parked_at=time.time())
+        it.pop("new", None)
+        save_work(w)
+    closed = []
+    for t in tabs:
+        checked_cmux("close-surface", "--surface", t["id"], "--workspace", t["workspace"], "--force")
+        closed.append(t["title"])
+    print(f"{time.strftime('%H:%M:%S')} work park: {item['title']} | closed {len(closed)} | ${cost:.4f}", flush=True)
+    return {"note": out["note"], "next": out["next"], "closed": closed}
+
+
+def resume(item_id, prompt=""):
+    """Reopen the item's most recent Claude session in its last workspace (Scratch if that's gone), in its own cwd."""
+    with _work_lock:
+        item = load_work()["items"][item_id]
+    metas = sorted(((tr, m) for tr, m in item.get("meta", {}).items() if m["agent"] == "claude" and Path(tr).is_file()),
+                   key=lambda x: x[1]["seen"], reverse=True)
+    if not metas:
+        raise RuntimeError("no Claude session to resume on this item")
+    tr, m = metas[0]
+    tree = json.loads(cmux("--json", "--id-format", "both", "tree", "--all"))
+    wss = {ws["id"]: ws for w in tree["windows"] for ws in w["workspaces"]}
+    ws = wss.get(m["workspace"]) or next(x for x in wss.values() if x["title"] == SCRATCH)
+    cmd = f"{NEW_SESSION_COMMAND} --resume {Path(tr).stem}" + (f" {shlex.quote(prompt)}" if prompt else "")
+    out = checked_cmux("--id-format", "uuids", "new-surface", "--workspace", ws["id"], "--working-directory", m.get("cwd") or str(Path.home()),
+                       "--command", cmd, "--focus", "false")
+    surface = re.search(r"[0-9A-F]{8}-[0-9A-F-]{27}", out)
+    if not surface:
+        raise RuntimeError(f"new-surface gave no surface id: {out[:200]}")
+    cmux("rename-tab", "--workspace", ws["id"], "--surface", surface.group(0), "--", m["title"])
+    with _work_lock:
+        w = load_work()
+        w["items"][item_id].update(state="active", updated=time.time())
+        save_work(w)
+    print(f"{time.strftime('%H:%M:%S')} work resume: {item['title']} -> {ws['title']} / {m['title']}", flush=True)
+    return {"workspace": ws["id"], "surface": surface.group(0), "title": m["title"], "workspace_title": ws["title"]}
+
+
+def work_edit(body):
+    """update / merge / attach / skip, all small edits to work.json."""
+    with _work_lock:
+        w = load_work()
+        op = body["op"]
+        if op == "update":
+            it = w["items"][body["id"]]
+            for k in ("title", "goal", "people", "state"):
+                if k in body:
+                    it[k] = body[k]
+            it.pop("new", None)
+            it["updated"] = time.time()
+        elif op == "merge":  # from -> into
+            if body["from"] == body["into"] or body["into"] not in w["items"]:
+                raise KeyError(body["into"])
+            a, b = w["items"].pop(body["from"]), w["items"][body["into"]]
+            b["sessions"] += [s for s in a["sessions"] if s not in b["sessions"]]
+            b["people"] += [p for p in a["people"] if p not in b["people"]]
+            b["sources"] = sorted(set(b["sources"]) | set(a["sources"]))
+            b.setdefault("meta", {}).update(a.get("meta", {}))
+            if b["state"] != "active" and a["state"] == "active":
+                b["state"] = "active"
+            b.pop("new", None)
+            b["updated"] = time.time()
+        elif op in ("attach", "skip", "split"):  # one tab: onto an item, out of all items, or into its own new item
+            tr = body["transcript"]
+            if not tr:
+                raise KeyError("transcript")
+            prev = owner_of(w, tr)
+            if prev:
+                prev["sessions"].remove(tr)
+                meta = prev.get("meta", {}).pop(tr, None)
+            else:
+                meta = None
+            if tr in w["skip"]:
+                w["skip"].remove(tr)
+            if op == "skip":
+                w["skip"].append(tr)
+            else:
+                if op == "split":
+                    it = {"id": new_id(), "title": body.get("title") or "New work", "goal": "", "people": [], "sources": [],
+                          "state": "active", "note": "", "next": "", "waits_on": "", "sessions": [], "created": time.time(), "updated": time.time()}
+                    w["items"][it["id"]] = it
+                else:
+                    it = w["items"][body["item"]]
+                it["sessions"].append(tr)
+                if meta:
+                    it.setdefault("meta", {})[tr] = meta
+                it["updated"] = time.time()
+        elif op == "group-set":  # item -> goal group ("" = none)
+            w["items"][body["id"]]["group"] = body["group"] if body["group"] in w.get("groups", {}) else ""
+        elif op == "group-rename":
+            w["groups"][body["group"]]["title"] = body["title"]
+        elif op == "group-new":
+            gid = "g" + new_id()[1:]
+            w.setdefault("groups", {})[gid] = {"id": gid, "title": body["title"], "order": len(w["groups"])}
+            if body.get("id"):
+                w["items"][body["id"]]["group"] = gid
+        elif op == "drop-proposal":
+            w["proposal"] = None
+        else:
+            raise KeyError(op)
+        save_work(w)
+    return {"ok": True}
+
+
+def route_capture(text, key):
+    """Capture -> an existing work item, or None. Slack thread already on an item wins; else one Haiku call."""
+    w = load_work()
+    if not w["seeded"]:
+        return None, ""
+    items = [i for i in w["items"].values() if i["state"] != "done"]
+    if key:
+        hit = next((i for i in items if key in i["sources"]), None)
+        if hit:
+            return hit, "same Slack thread"
+    if not items:
+        return None, ""
+    payload = {"note": text, "items": [{"id": i["id"], "title": i["title"], "goal": i["goal"], "people": i["people"],
+                                        "state": i["state"], "next": i["next"]} for i in items]}
+    out, cost = model_call(ROUTE_RULES, payload, ROUTE_SCHEMA)
+    print(f"{time.strftime('%H:%M:%S')} capture route: {out} ${cost:.4f}", flush=True)
+    hit = w["items"].get(out["item"]) if out["confident"] else None
+    return hit, out["reason"]
+
+
+def deliver_to_item(item, text, key):
+    """Send a capture to the item's best live Claude tab, or resume the item with the note as the first prompt."""
+    st = state()
+    live = live_tabs(st)
+    rank = {"waiting": 0, "idle": 1, "done": 2, "working": 3}
+    tabs = sorted((live[tr] for tr in item["sessions"] if tr in live and live[tr]["status"] in rank and live[tr]["agent"] == "claude"),
+                  key=lambda t: rank[t["status"]])
+    note = f"New capture for this work ({item['title']}): {text}\nRead the source first if it has a link. {SENDER_STEP}\nThen continue."
+    with _work_lock:
+        w = load_work()
+        if key and key not in w["items"][item["id"]]["sources"]:
+            w["items"][item["id"]]["sources"].append(key)
+            save_work(w)
+    if tabs:
+        t = tabs[0]
+        out = subprocess.run([CMUX, "paste", "--workspace", t["workspace"], "--surface", t["id"], "--submit", "-"], input=note,
+                             capture_output=True, text=True, timeout=10, env={**os.environ, "CMUX_QUIET": "1"})
+        if out.returncode:
+            raise RuntimeError(f"could not send to {t['title']}: {out.stderr.strip()[:200]}")
+        return {"routed": "continued", "message": f"Sent to {item['title']} ({t['title']})", "surface": t["id"], "workspace": t["workspace"]}
+    r = resume(item["id"], note)
+    return {"routed": "resumed", "message": f"Reopened {item['title']} in {r['workspace_title']}", "surface": r["surface"], "workspace": r["workspace"]}
+
+
+GROUPS_SCHEMA = {"type": "object", "required": ["groups", "assign"], "properties": {
+    "groups": {"type": "array", "items": {"type": "object", "required": ["key", "title"], "properties": {
+        "key": {"type": "string"}, "title": {"type": "string"}}}},
+    "assign": {"type": "array", "items": {"type": "object", "required": ["item", "group"], "properties": {
+        "item": {"type": "string"}, "group": {"type": "string"}}}}}}
+GROUPS_RULES = """Robert's work items are listed below. Group them by the GOAL they serve: the larger objective the outcome moves forward,
+the answer to "why does this work exist?". Not by who asked, and not by tool or domain.
+- As FEW groups as honestly fit, usually 3 to 5. A group is a business or life objective that many items move forward,
+  e.g. "Grow Discover revenue", "AI search visibility", "My agent tooling", "Next role". Title Case, 2-5 words.
+- A tool, system, data source or activity is never a goal (not "Parrot Automation", "Call Data", "Analytics", "Collateral").
+  Ask what it is FOR: a sales-rep report, a contact refresh and a call-data feed all serve the same sales objective.
+- Test each group: would Robert say "this quarter I'm trying to <group title>"? If not, merge it into the objective it serves.
+- No "Misc" or "Other" unless an item truly serves nothing else.
+- Every item id appears exactly once in assign. Group keys: "g1", "g2", ...
+Input:
+"""
+
+
+def propose_groups():
+    """One Sonnet call: goal groups for every not-done item. Replaces any existing groups (Robert can rename and move after)."""
+    with _work_lock:
+        w = load_work()
+    items = [i for i in w["items"].values() if i["state"] != "done"]
+    payload = {"items": [{"id": i["id"], "title": i["title"], "goal": i["goal"], "people": i["people"],
+                          "workspaces": sorted({m.get("workspace_title", "") for m in i.get("meta", {}).values()} - {""})} for i in items]}
+    out, cost = model_call(GROUPS_RULES, payload, GROUPS_SCHEMA, model="sonnet", timeout=SEED_TIMEOUT)
+    with _work_lock:
+        w = load_work()
+        ids = {g["key"]: "g" + new_id()[1:] for g in out["groups"]}
+        w["groups"] = {ids[g["key"]]: {"id": ids[g["key"]], "title": g["title"], "order": n} for n, g in enumerate(out["groups"])}
+        for a in out["assign"]:
+            if a["item"] in w["items"]:
+                w["items"][a["item"]]["group"] = ids.get(a["group"], "")
+        save_work(w)
+    print(f"{time.strftime('%H:%M:%S')} goal groups: {len(ids)} groups for {len(items)} items, ${cost:.3f}", flush=True)
+    return {"groups": len(ids), "cost": cost}
+
+
+def add_sender(item, s):
+    item.setdefault("asked_by", []).append(s)
+    if s["person"] not in item["people"]:
+        item["people"].append(s["person"])
+    item["updated"] = time.time()
+
+
+def record_sender(surface, person, ask):
+    """A capture session says who is asking. Goes on the tab's item now, or waits until the sorter files the tab."""
+    s = {"person": person.strip(), "ask": ask.strip()[:120], "at": time.time()}
+    tr = next((t["transcript"] for t in live_tabs(state()).values() if t["id"] == surface), None)
+    with _work_lock:
+        w = load_work()
+        item = owner_of(w, tr) if tr else None
+        if item:
+            add_sender(item, s)
+        else:
+            w.setdefault("pending_senders", {})[surface] = s
+        save_work(w)
+    print(f"{time.strftime('%H:%M:%S')} sender: {person} -> {item['title'] if item else 'pending ' + surface[:8]}", flush=True)
+    return {"item": item and item["title"], "pending": not item}
+
+
+CAPTURE_LOG = Path.home() / ".overworld" / "captures.jsonl"  # one row per capture and per redirect; the page shows the recent ones
+_capture_lock = threading.Lock()
+
+
+def capture_logged(text, route=True):
+    """capture() plus a log row, and the reason in the message so the hotkey alert says why it went where it went."""
+    r = capture(text, route)
+    row = {"id": new_id(), "at": time.time(), "text": text, **r}
+    if r["routed"] != "new" and r.get("reason"):
+        row["message"] = r["message"] + ": " + r["reason"].rstrip(". ")
+    row["message"] += ". Wrong? Fix it in Overworld."
+    with _capture_lock, open(CAPTURE_LOG, "a") as f:
+        f.write(json.dumps(row) + "\n")
+    return row
+
+
+def recent_captures(n=6, within=86400):
+    if not CAPTURE_LOG.exists():
+        return []
+    rows = [json.loads(l) for l in CAPTURE_LOG.read_text().splitlines() if l.strip()]
+    gone = {r["redirected_from"] for r in rows if r.get("redirected_from")}
+    return [r for r in rows if r["at"] > time.time() - within and r["id"] not in gone][-n:][::-1]
+
+
+def redirect_capture(cid, to):
+    """Robert says a capture went to the wrong place. Undo there (tell a continued tab to ignore it, close a tab opened for it),
+    drop the Slack thread link it made, then send it to `to`: a work item id, or "new" for a fresh tab."""
+    rows = [json.loads(l) for l in CAPTURE_LOG.read_text().splitlines() if l.strip()]
+    rec = next(r for r in rows if r["id"] == cid)
+    if rec["routed"] == "continued":
+        msg = f"Ignore the capture I just sent (it starts: {rec['text'][:80]!r}). It was routed to this tab by mistake; do nothing with it."
+        out = subprocess.run([CMUX, "paste", "--workspace", rec["workspace"], "--surface", rec["surface"], "--submit", "-"], input=msg,
+                             capture_output=True, text=True, timeout=10, env={**os.environ, "CMUX_QUIET": "1"})
+        if out.returncode:
+            raise RuntimeError(f"could not tell the old tab to ignore it: {out.stderr.strip()[:200]}")
+    else:  # resumed or new: the tab exists only because of this capture
+        checked_cmux("close-surface", "--surface", rec["surface"], "--workspace", rec["workspace"], "--force")
+    key = rec.get("key")
+    if key:
+        with _work_lock:
+            w = load_work()
+            for i in w["items"].values():
+                if key in i["sources"] and i["id"] != to:
+                    i["sources"].remove(key)
+            save_work(w)
+        threads = json.loads(THREADS.read_text()) if THREADS.exists() else {}
+        if threads.pop(key, None):
+            THREADS.write_text(json.dumps(threads, indent=1))
+    if to == "new":
+        r = capture(rec["text"], route=False)
+        if rec.get("item"):
+            with _work_lock:
+                w = load_work()
+                w.setdefault("avoid", {})[r["surface"]] = rec["item"]
+                save_work(w)
+    else:
+        item = load_work()["items"][to]
+        r = {**deliver_to_item(item, rec["text"], key), "reason": "you moved it here", "item": item["id"], "item_title": item["title"], "key": key}
+    row = {"id": new_id(), "at": time.time(), "text": rec["text"], "redirected_from": cid, **r}
+    with _capture_lock, open(CAPTURE_LOG, "a") as f:
+        f.write(json.dumps(row) + "\n")
+    print(f"{time.strftime('%H:%M:%S')} capture redirect: {cid} -> {to} ({r['routed']})", flush=True)
+    return row
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -1146,7 +1824,10 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path == "/api/state":
-            self._send(200, state())
+            st = state()
+            st["work"] = work_view(st) if st["regions"] else {"seeded": False, "items": [], "unsorted": [], "proposal": None}
+            st["captures"] = recent_captures()
+            self._send(200, st)
         elif self.path.startswith("/api/action?surface="):
             # On demand, for the reply view on a session the background pass skips (not "your turn").
             surface = self.path.split("=", 1)[1]
@@ -1234,8 +1915,44 @@ class Handler(BaseHTTPRequestHandler):
             if out.returncode:
                 print(f"{time.strftime('%H:%M:%S')} send failed: {out.stderr.strip()[:300]}", flush=True)
                 return self._send(502, {"error": out.stderr.strip()[:300] or f"cmux exited {out.returncode}"})
+        elif self.path == "/api/capture":
+            try:
+                return self._send(200, capture_logged(body["text"].strip()))
+            except (subprocess.SubprocessError, json.JSONDecodeError, KeyError, StopIteration, RuntimeError) as e:
+                print(f"{time.strftime('%H:%M:%S')} capture failed: {e!r}"[:400], flush=True)
+                return self._send(502, {"error": repr(e)[:300]})
+        elif self.path == "/api/capture/redirect":
+            try:
+                return self._send(200, redirect_capture(body["id"], body["to"]))
+            except (subprocess.SubprocessError, json.JSONDecodeError, KeyError, StopIteration, RuntimeError, OSError) as e:
+                print(f"{time.strftime('%H:%M:%S')} capture redirect failed: {e!r}"[:400], flush=True)
+                return self._send(502, {"error": repr(e)[:300]})
+        elif self.path.startswith("/api/work/"):
+            op = self.path.rsplit("/", 1)[1]
+            try:
+                if op == "seed":
+                    return self._send(200, seed_work())
+                if op == "accept":
+                    return self._send(200, accept_seed(body["items"]))
+                if op == "park":
+                    return self._send(200, park(body["id"]))
+                if op == "resume":
+                    r = resume(body["id"])
+                    focus(r["workspace"], r["surface"])
+                    return self._send(200, r)
+                if op == "edit":
+                    return self._send(200, work_edit(body))
+                if op == "groups":
+                    return self._send(200, propose_groups())
+                if op == "sender":
+                    return self._send(200, record_sender(body["surface"], body["person"], body.get("ask", "")))
+                return self._send(404, {"error": "not found"})
+            except (subprocess.SubprocessError, json.JSONDecodeError, KeyError, StopIteration, RuntimeError) as e:
+                print(f"{time.strftime('%H:%M:%S')} work {op} failed: {e!r}"[:400], flush=True)
+                return self._send(502, {"error": repr(e)[:300]})
         elif self.path == "/api/close":
-            cmux("close-surface", "--surface", body["surface"], "--workspace", body["workspace"])
+            # force: plain shells (no agent) only; cmux refuses to close a tab with a running process without it
+            cmux("close-surface", "--surface", body["surface"], "--workspace", body["workspace"], *(["--force"] if body.get("force") else []))
         else:
             return self._send(404, {"error": "not found"})
         self._send(200, {"ok": True})
@@ -1251,4 +1968,6 @@ if __name__ == "__main__":
     threading.Thread(target=keep_workspace, daemon=True).start()
     threading.Thread(target=keep_actions, daemon=True).start()
     threading.Thread(target=keep_usage, daemon=True).start()
+    threading.Thread(target=keep_work, daemon=True).start()
+    threading.Thread(target=keep_came_from, daemon=True).start()
     httpd.serve_forever()

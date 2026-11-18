@@ -7,6 +7,10 @@ A live map of every cmux workspace (region) and tab (session), with each Claude/
 - `autostart.zsh`: source it from `~/.zshrc`. It starts the server from the first cmux shell, because cmux's socket only accepts processes launched inside cmux.
 - `spinoff.sh`: backs the `/spinoff` skill. It opens a child session from a handoff brief and records the parent link.
 
+- `hammerspoon/init.lua`: copy to `~/.hammerspoon/init.lua`. ctrl+alt+cmd+N opens the quick-capture box; the note (plus any Slack link or clipboard screenshot) goes to the server, which routes it to the matching work item or opens a new session.
+
+Work view (default, `w` toggles to the tab map): tabs map to work items (`~/.overworld/work.json`), and items map to goals. Park an item to close its tabs with a note and next step; resume reopens the same session.
+
 Groups: sections follow cmux's native workspace groups (the sidebar folders). Drag a workspace header onto a section to regroup it.
 
 Shortcuts: ⌘1 opens the Overworld (it stays pinned in slot 1). ⌘⇧1 goes back to your last tab, via this line in `~/.config/cmux/cmux.json`:

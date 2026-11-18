@@ -249,6 +249,130 @@
   .broadcast textarea:focus { outline: none; border-color: var(--working); }
   .broadcast .hint { margin-top: 4px; }
   .shell .title { color: var(--muted); font-weight: 400; }
+  /* Work view: work items are the unit; their tabs hang under them */
+  .work { padding: 10px 16px 40px; }
+  .work h4 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 18px 0 8px; display: flex; gap: 8px; align-items: center; }
+  .work h4 .count { font-weight: 400; }
+  .items { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 12px; align-items: start; }
+  .item { background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--c); border-radius: 10px; overflow: hidden; }
+  .item.drop { border-color: var(--working); box-shadow: 0 0 0 1px var(--working); }
+  .item.dragging { opacity: .4; }
+  .item .ihead { display: flex; gap: 8px; align-items: baseline; padding: 9px 12px 2px; cursor: grab; }
+  .item .ihead .name { font-weight: 650; font-size: 14px; flex: 1; min-width: 0; }
+  .item .ihead:hover .pen { visibility: visible; }
+  .item .badge { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--working); border: 1px solid var(--working); border-radius: 4px; padding: 0 4px; }
+  .item .sub2 { color: var(--muted); font-size: 11px; padding: 0 12px; display: flex; flex-wrap: wrap; gap: 4px 8px; }
+  .item .chip { background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 0 7px; color: var(--text); }
+  .item .next { padding: 5px 12px 6px; color: var(--muted); }
+  .item .next.mine { color: var(--text); }
+  .item .next b { color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; margin-right: 6px; }
+  .item .tabs { border-top: 1px solid var(--line); }
+  .item .tabs .session { border-left-width: 2px; padding: 5px 12px 5px 10px; }
+  .item .tabs .session .recap { -webkit-line-clamp: 1; }
+  .item .iacts { display: flex; gap: 6px; padding: 7px 12px 9px; border-top: 1px solid var(--line); flex-wrap: wrap; }
+  .item .iacts button, .wbtn { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 2px 10px; font: inherit; cursor: pointer; }
+  .item .iacts button:hover, .wbtn:hover { border-color: var(--muted); }
+  .item .iacts button.armed { border-color: var(--danger); color: var(--danger); }
+  .item .iacts .hint { margin-left: auto; align-self: center; }
+  .item .iacts .fail { color: var(--danger); }
+  .wpanel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; max-width: 980px; }
+  .wpanel p { color: var(--muted); margin: 4px 0 10px; }
+  .prop { border-top: 1px solid var(--line); padding: 8px 0; }
+  .prop input { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 4px; font: inherit; padding: 2px 6px; }
+  .prop input.t { font-weight: 650; width: 280px; }
+  .prop input.p { width: 320px; }
+  .prop .goal { color: var(--muted); margin: 3px 0; }
+  .prop .ptabs { display: flex; flex-wrap: wrap; gap: 4px; }
+  .prop .ptab { background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 1px 8px; display: flex; gap: 6px; align-items: center; }
+  .prop .ptab select { background: var(--bg); color: var(--muted); border: 0; font: inherit; font-size: 11px; width: 64px; }
+  .seedbar { position: sticky; top: var(--hdr, 76px); z-index: 2; background: var(--panel); border: 1px solid var(--waiting); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px;
+             display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; }
+  .seedbar > b { font-size: 14px; }
+  .seedbar > .hint { flex-basis: 100%; }
+  .seedbar .iacts { padding: 4px 0 0; flex-basis: 100%; }
+  .wbtn.primary { background: var(--waiting); color: #12131a; border-color: var(--waiting); font-weight: 650; }
+  /* Seed review as a diff: today's tabs (left) -> proposed work items (right) */
+  .wpanel:has(.diff) { max-width: 1240px; }
+  .facts { display: flex; flex-wrap: wrap; gap: 6px 14px; flex-basis: 100%; }
+  .fact b { font-size: 15px; }
+  .fact.join b { color: var(--tool); } .fact.split b { color: var(--waiting); } .fact.same b { color: var(--done); } .fact.out b { color: var(--muted); }
+  .diff { position: relative; display: grid; grid-template-columns: minmax(260px, 360px) minmax(360px, 1fr); column-gap: 160px; margin-top: 6px; }
+  .diff svg.links { position: absolute; inset: 0; pointer-events: none; overflow: visible; }
+  .diff path { fill: none; stroke-width: 2; opacity: .75; transition: opacity .12s; }
+  .dcol { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+  .dhead { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  .dbox { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; transition: opacity .12s; }
+  .dbox.drop { border-color: var(--working); box-shadow: 0 0 0 1px var(--working); }
+  .dtitle { display: flex; gap: 8px; align-items: baseline; font-weight: 650; margin-bottom: 4px; }
+  .dtitle .name { flex: 1; min-width: 0; cursor: text; }
+  .dtitle .cnt { color: var(--muted); font-weight: 400; font-size: 11px; }
+  .tag { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; border-radius: 4px; padding: 0 5px; border: 1px solid; }
+  .tag.split { color: var(--waiting); } .tag.join { color: var(--tool); }
+  .dtab { display: flex; gap: 7px; align-items: center; padding: 3px 4px; border-radius: 4px; cursor: grab; transition: opacity .12s; }
+  .dtab:hover { background: var(--panel); }
+  .dtab .sw { width: 10px; height: 10px; border-radius: 3px; background: var(--h); flex: none; }
+  .dtab.gone { color: var(--muted); text-decoration: line-through; }
+  .item2 { border-left: 4px solid var(--h); }
+  .dgoal { color: var(--muted); }
+  .dpeople { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
+  .dpeople .chip { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 0 7px; font-size: 11px; }
+  .outbox { border-style: dashed; color: var(--muted); }
+  .diff.focused .dtab:not(.on), .diff.focused .item2:not(.on) { opacity: .25; }
+  .diff.focused path { opacity: .06; }
+  .diff.focused path.on { opacity: 1; stroke-width: 3; }
+  .caps .cap { display: flex; gap: 8px; align-items: baseline; padding: 4px 0; border-bottom: 1px solid var(--line); }
+  .caps .cap .when { color: var(--muted); font-size: 11px; width: 52px; flex: none; }
+  .caps .cap .note { min-width: 0; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .caps .cap .arrow { color: var(--muted); }
+  .caps .cap .why { color: var(--muted); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .caps .cap select { background: var(--bg); color: var(--muted); border: 1px solid var(--line); border-radius: 4px; font: inherit; font-size: 11px; }
+  .caps .cap.new b { color: var(--muted); }
+  .caps .cap.go { cursor: pointer; } .caps .cap.go:hover { background: var(--line); }
+  .caps .fail, .wpanel .fail { color: var(--danger); }
+  .ghead { border-top: 1px solid var(--line); padding-top: 14px; color: var(--text) !important; font-size: 13px !important; }
+  .ghead.drop { color: var(--working) !important; }
+  .ghead .pen { visibility: hidden; }
+  .ghead:hover .pen { visibility: visible; }
+  .item .asked { padding: 0 12px 5px; color: var(--muted); }
+  .item .asked b { color: var(--text); font-weight: 600; }
+  .regroup { margin: 18px 0 6px; }
+  /* Work map: spaces/tabs -> work items -> goals */
+  .wmap { position: relative; display: grid; grid-template-columns: minmax(280px, 380px) minmax(320px, 460px) minmax(200px, 280px); column-gap: 110px; margin-top: 10px; }
+  .wmap svg.links { position: absolute; inset: 0; pointer-events: none; overflow: visible; }
+  .wmap path { fill: none; opacity: .6; transition: opacity .12s; }
+  .wmap.focused path { opacity: .05; }
+  .wmap.focused path.on { opacity: 1; }
+  .wmap.focused [data-key]:not(.on) { opacity: .25; }
+  .wmap .pinned { outline: 2px solid var(--h, var(--text)); outline-offset: 2px; }
+  .mtab { display: flex; gap: 7px; align-items: baseline; padding: 3px 4px; border-radius: 4px; cursor: pointer; transition: opacity .12s; }
+  .mtab:hover { background: var(--panel); }
+  .mtab .dot { background: var(--c); flex: none; }
+  .mtab .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mtab .meta { color: var(--muted); font-size: 11px; white-space: nowrap; }
+  .mtab.loose .name { color: var(--muted); font-style: italic; }
+  .mtab.waiting .name { color: var(--waiting); }
+  .mitem, .mgoal { background: var(--bg); border: 1px solid var(--line); border-left: 4px solid var(--h); border-radius: 8px; padding: 7px 10px; transition: opacity .12s; }
+  .mitem.needs { border-color: var(--waiting); border-left-color: var(--h); box-shadow: 0 0 0 1px var(--waiting); }
+  .mitem.parked { opacity: .7; border-style: dashed; border-left-style: solid; }
+  .mitem.drop, .mgoal.drop { border-color: var(--working); box-shadow: 0 0 0 1px var(--working); }
+  .mitem .dtitle, .mgoal .dtitle { margin: 0; cursor: grab; }
+  .mitem .dtitle .pen, .mgoal .dtitle .pen { visibility: hidden; }
+  .mitem:hover .pen, .mgoal:hover .pen { visibility: visible; }
+  .mitem .st { font-size: 11px; font-weight: 500; color: var(--muted); white-space: nowrap; }
+  .mitem .st.waiting { color: var(--waiting); font-weight: 650; }
+  .mitem .st.working { color: var(--working); }
+  .mnext { margin-top: 3px; color: var(--text); }
+  .masked { margin-top: 2px; color: var(--muted); font-size: 12px; }
+  .masked b { color: var(--text); font-weight: 600; }
+  .macts { display: none; gap: 6px; margin-top: 6px; flex-wrap: wrap; align-items: center; }
+  .mitem:hover .macts, .macts:has(.hint) { display: flex; }
+  .macts button { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 1px 9px; font: inherit; cursor: pointer; }
+  .mgoal .dtitle { font-size: 14px; }
+  .strip { display: flex; flex-wrap: wrap; gap: 8px; }
+  .strip .session { width: 340px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
+  .wzone { padding: 10px; border: 1px dashed var(--muted); border-radius: 10px; color: var(--muted); text-align: center; display: none; }
+  body.dragging-session .wzone { display: block; }
+  .wzone.drop { border-color: var(--working); color: var(--text); }
   .err { padding: 16px; color: var(--waiting); }
 </style>
 </head>
@@ -260,7 +384,8 @@
   <button class="add" id="autoAll" title="Name every workspace and session from its conversation (key: a)">✨ Auto-name all</button>
   <button class="add" id="newGroup" title="New empty group">+ New group</button>
   <button class="add" id="inboxBtn" title="Every session and background agent in one list (key: i)">Inbox</button>
-  <span class="hint">drag a session onto another region to move it, or onto blank group space for its own workspace · keys: arrows move · r reply (to all ticked, if any) · Space tick · Enter open · Esc clear · a auto-name · i inbox · ⌘⇧1 back</span>
+  <button class="add" id="viewBtn" title="Switch between work items and tabs (key: w)">Tabs view</button>
+  <span class="hint">drag a session onto another region to move it, or onto blank group space for its own workspace · keys: arrows move · r reply (to all ticked, if any) · Space tick · Enter open · Esc clear · a auto-name · i inbox · w work/tabs · ⌘⇧1 back</span>
   <label><input type="checkbox" id="showShells"> show plain shells</label>
 </header>
 <main id="map"></main>
@@ -567,7 +692,7 @@ function sessionEl(t, isChild) {
   x.title = "Close this session (click twice)";
   x.onclick = e => {
     e.stopPropagation();
-    if (armed === t.id) { armed = null; post("/api/close", { workspace: t.workspace, surface: t.id }); }
+    if (armed === t.id) { armed = null; post("/api/close", { workspace: t.workspace, surface: t.id, force: !t.agent }); }
     else { armed = t.id; setTimeout(() => { if (armed === t.id) { armed = null; render(last); } }, 3000); }
     render(last);
   };
@@ -1012,12 +1137,461 @@ document.addEventListener("keydown", e => {
 });
 setInterval(loadTimeline, 3000);
 
+// ---------- Work view: work items are the unit; their tabs hang under them. The tab map is one key (w) away. ----------
+let view = "work";
+try { view = localStorage.getItem("ow.view") || "work"; } catch (e) { /* storage blocked: default view */ }
+const viewBtn = document.getElementById("viewBtn");
+function setView(v) { view = v; remember("ow.view", v); viewBtn.textContent = v === "work" ? "Tabs view" : "Work view"; render(last); }
+viewBtn.onclick = () => setView(view === "work" ? "tabs" : "work");
+viewBtn.textContent = view === "work" ? "Tabs view" : "Work view";
+const clearPin = () => { const w = document.querySelector(".wmap"); if (mapPin && w) { mapPin = null; mapApply(w, w._chain); } };
+document.addEventListener("click", e => { if (!e.target.closest(".wmap")) clearPin(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape") clearPin(); });
+document.addEventListener("keydown", e => { if (e.key === "w" && !typing(e) && ib.hidden && !document.getElementById("peek")) setView(view === "work" ? "tabs" : "work"); });
+
+let draggingItem = null, workBusy = {}, workMsg = {}, armedItem = null, seeding = false, propEdit = null, shellsOpen = false, doneOpen = false;
+async function workPost(op, body) {
+  const res = await fetch("/api/work/" + op, { method: "POST", body: JSON.stringify(body || {}) });
+  const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+  if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`);
+  return data;
+}
+async function itemAct(it, op, label, body) {
+  workBusy[it.id] = label; delete workMsg[it.id]; render(last);
+  try { const r = await workPost(op, body || { id: it.id }); workMsg[it.id] = { ok: true, text: op === "park" ? "Parked. Next: " + r.next : op === "resume" ? "Opened " + r.title : "" }; }
+  catch (e) { workMsg[it.id] = { ok: false, text: e.message }; }
+  delete workBusy[it.id];
+  tick();
+}
+const edit = body => workPost("edit", body).then(tick, e => console.log("[overworld] work edit failed", e.message));
+
+// Merge is the one edit that can't be undone in one click, so it asks in a bar (window.confirm would block the page).
+let pendingMerge = null;
+function mergeBar() {
+  const bar = el("div", "broadcast");
+  bar.append(el("div", null, `Merge "${pendingMerge.from.title}" into "${pendingMerge.into.title}"? Its tabs, people and links move over.`));
+  const row = el("div", "iacts"); row.style.border = "0"; row.style.padding = "8px 0 0";
+  const yes = el("button", "wbtn", "Merge"), no = el("button", "wbtn", "Cancel");
+  yes.onclick = () => { const p = pendingMerge; pendingMerge = null; edit({ op: "merge", from: p.from.id, into: p.into.id }); };
+  no.onclick = () => { pendingMerge = null; render(last); };
+  row.append(yes, no); bar.append(row);
+  return bar;
+}
+
+function section(title, n, extra) {
+  const h = el("h4"); h.append(title, el("span", "count", String(n))); if (extra) h.append(extra); return h;
+}
+
+function seedPanel(w) {
+  const panel = el("div", "wpanel");
+  if (!w.proposal) {
+    panel.append(el("b", null, "Group your tabs into work items"),
+      el("p", null, "One model call reads every agent tab and proposes the pieces of work they belong to. You review and edit before anything is saved. Takes about 20 seconds."));
+    const go = el("button", "wbtn", seeding ? "Reading your tabs…" : "Propose work items");
+    go.disabled = seeding;
+    go.onclick = async () => { seeding = true; render(last); try { await workPost("seed"); } catch (e) { workMsg.seed = e.message; } seeding = false; tick(); };
+    panel.append(go);
+    if (workMsg.seed) panel.append(el("p", "fail", workMsg.seed));
+    return panel;
+  }
+  // Review as a diff: today's workspaces and tabs on the left, proposed work items on the right, one colored line per tab.
+  if (!propEdit) propEdit = JSON.parse(JSON.stringify(w.proposal.items));
+  const known = [...w.proposal.items.flatMap(p => p.tabs), ...w.proposal.unsorted];
+  const itemOf = new Map();
+  propEdit.forEach((p, i) => p.tabs.forEach(t => itemOf.set(t.id, i)));
+  const leftRegions = last.regions.map(r => ({ r, tabs: r.sessions.filter(t => known.some(k => k.id === t.id)) })).filter(x => x.tabs.length);
+  const regionOf = new Map();
+  leftRegions.forEach(({ r, tabs }) => tabs.forEach(t => regionOf.set(t.id, r.title)));
+  const live = propEdit.map((p, i) => ({ p, i })).filter(x => x.p.tabs.length);
+  const joins = live.filter(x => new Set(x.p.tabs.map(t => regionOf.get(t.id))).size > 1);
+  const splits = leftRegions.filter(x => new Set(x.tabs.map(t => itemOf.get(t.id)).filter(i => i != null)).size > 1);
+  const out = known.filter(k => !itemOf.has(k.id));
+
+  const ask = el("div", "seedbar");
+  ask.append(el("b", null, `${known.length} tabs in ${leftRegions.length} workspaces → ${live.length} work items. Accept to save.`));
+  const facts = el("div", "facts");
+  const fact = (n, text, cls) => { const f = el("span", "fact " + cls); f.append(el("b", null, String(n)), " " + text); facts.append(f); };
+  fact(joins.length, joins.length === 1 ? "item joins tabs from different workspaces" : "items join tabs from different workspaces", "join");
+  fact(splits.length, splits.length === 1 ? "workspace splits into several items" : "workspaces split into several items", "split");
+  fact(live.length - joins.length, "items map to tabs in one workspace", "same");
+  if (out.length) fact(out.length, "tabs left out", "out");
+  ask.append(facts, el("span", "hint", "Hover anything to trace its lines. Drag a tab (left) onto an item (right) to move it. Click an item title to rename."));
+  const acts = el("div", "iacts");
+  const ok = el("button", "wbtn primary", "Accept"), again = el("button", "wbtn", seeding ? "Reading your tabs…" : "Propose again"), cancel = el("button", "wbtn", "Discard");
+  ok.onclick = async () => {
+    const items = propEdit.map(p => ({ title: p.title, goal: p.goal, people: p.people, tabs: p.tabs.map(x => x.transcript) }));
+    try { await workPost("accept", { items }); propEdit = null; } catch (e) { workMsg.seed = e.message; }
+    tick();
+  };
+  again.onclick = async () => { seeding = true; propEdit = null; render(last); try { await workPost("seed"); } catch (e) { workMsg.seed = e.message; } seeding = false; tick(); };
+  cancel.onclick = () => { propEdit = null; edit({ op: "drop-proposal" }); };
+  acts.append(ok, again, cancel);
+  if (w.proposal.cost != null) acts.append(el("span", "hint", `proposal cost $${w.proposal.cost.toFixed(3)}`));
+  ask.append(acts);
+  if (workMsg.seed) ask.append(el("p", "fail", workMsg.seed));
+
+  const hue = i => `hsl(${(i * 137.5) % 360} 65% 62%)`;
+  const diff = el("div", "diff"), L = el("div", "dcol"), R = el("div", "dcol right");
+  L.append(el("div", "dhead", "Today: workspaces and tabs"));
+  R.append(el("div", "dhead", "Proposed: work items (labels only; no tab, workspace or group moves in cmux)"));
+  leftRegions.forEach(({ r, tabs }) => {
+    const box = el("div", "dbox ws"), h = el("div", "dtitle", r.title);
+    const g = r.scratch ? null : (last.groups.find(x => x.id === r.group) || {}).name;
+    if (g) h.append(el("span", "cnt", g));
+    const n = new Set(tabs.map(t => itemOf.get(t.id)).filter(i => i != null)).size;
+    if (n > 1) h.append(el("span", "tag split", `splits into ${n}`));
+    box.append(h);
+    tabs.forEach(t => {
+      const i = itemOf.get(t.id), row = el("div", "dtab" + (i == null ? " gone" : ""));
+      row.dataset.tab = t.id; if (i != null) row.dataset.item = i;
+      row.style.setProperty("--h", i == null ? "var(--idle)" : hue(i));
+      row.append(el("span", "sw"), el("span", null, t.title));
+      row.draggable = true;
+      row.ondragstart = e => { dragging = { diffTab: t.id }; e.dataTransfer.setData("text/plain", t.id); };
+      row.ondragend = () => { dragging = null; document.querySelectorAll(".drop").forEach(x => x.classList.remove("drop")); };
+      box.append(row);
+    });
+    L.append(box);
+  });
+  // Items ordered by where their first tab sits on the left, so lines cross as little as possible.
+  const leftOrder = leftRegions.flatMap(x => x.tabs.map(t => t.id));
+  const firstPos = x => Math.min(...x.p.tabs.map(t => leftOrder.indexOf(t.id)).map(v => v < 0 ? 1e9 : v));
+  const moveTab = (id, to) => {
+    const tab = known.find(k => k.id === id);
+    propEdit.forEach(p => { p.tabs = p.tabs.filter(t => t.id !== id); });
+    if (to != null) propEdit[to].tabs.push(tab);
+    render(last);
+  };
+  const dropOn = (box, to) => {
+    box.ondragover = e => { if (dragging && dragging.diffTab) { e.preventDefault(); box.classList.add("drop"); } };
+    box.ondragleave = () => box.classList.remove("drop");
+    box.ondrop = e => { e.preventDefault(); box.classList.remove("drop"); if (dragging && dragging.diffTab) { const id = dragging.diffTab; dragging = null; moveTab(id, to); } };
+  };
+  live.sort((a, b) => firstPos(a) - firstPos(b)).forEach(({ p, i }) => {
+    const box = el("div", "dbox item2"); box.dataset.item = i;
+    box.style.setProperty("--h", hue(i));
+    const h = el("div", "dtitle"), name = el("span", "name", p.title);
+    name.title = "Click to rename";
+    name.onclick = () => { const pen = pencil(name, p.title, t => { p.title = t; }); pen.click(); };
+    h.append(name);
+    const ws = new Set(p.tabs.map(t => regionOf.get(t.id)));
+    if (ws.size > 1) h.append(el("span", "tag join", `joins ${ws.size} workspaces`));
+    h.append(el("span", "cnt", `${p.tabs.length} tab${p.tabs.length === 1 ? "" : "s"}`));
+    box.append(h, el("div", "dgoal", p.goal));
+    if (p.people.length) { const pp = el("div", "dpeople"); p.people.forEach(x => pp.append(el("span", "chip", x))); box.append(pp); }
+    dropOn(box, i);
+    R.append(box);
+  });
+  const outBox = el("div", "dbox outbox", out.length ? `Left out: ${out.map(k => (sessionById(k.id) || {}).title || "closed tab").join(", ")}` : "Drop a tab here to leave it out");
+  dropOn(outBox, null);
+  R.append(outBox);
+  const svg = document.createElementNS(SVGNS, "svg"); svg.classList.add("links");
+  diff.append(svg, L, R);
+  diff.onmouseover = e => { const n = e.target.closest("[data-item]"); diffFocus = n ? n.dataset.item : null; applyFocus(diff); };
+  diff.onmouseleave = () => { diffFocus = null; applyFocus(diff); };
+  panel.replaceChildren(ask, diff);
+  requestAnimationFrame(() => drawLinks(diff));
+  return panel;
+}
+let diffFocus = null;
+function applyFocus(diff) {
+  diff.classList.toggle("focused", diffFocus != null);
+  diff.querySelectorAll("[data-item]").forEach(n => n.classList.toggle("on", n.dataset.item === diffFocus));
+}
+function drawLinks(diff) {
+  const svg = diff.querySelector("svg.links"); if (!svg) return;
+  const base = diff.getBoundingClientRect();
+  svg.setAttribute("width", base.width); svg.setAttribute("height", base.height);
+  svg.replaceChildren();
+  const seen = {};
+  diff.querySelectorAll(".dtab[data-item]").forEach(row => {
+    const box = diff.querySelector(`.item2[data-item="${row.dataset.item}"]`); if (!box) return;
+    const a = row.getBoundingClientRect(), b = box.getBoundingClientRect();
+    const k = row.dataset.item, n = seen[k] = (seen[k] || 0) + 1;
+    const x1 = a.right - base.left, y1 = a.top + a.height / 2 - base.top;
+    const x2 = b.left - base.left, y2 = b.top - base.top + Math.min(14 + n * 6, b.height - 6);
+    const mid = (x1 + x2) / 2;
+    const path = svgEl("path", { d: `M${x1},${y1} C${mid},${y1} ${mid},${y2} ${x2},${y2}`, stroke: getComputedStyle(row).getPropertyValue("--h"), "data-item": k });
+    svg.append(path);
+  });
+  applyFocus(diff);
+}
+
+// Recent captures: where each hotkey note went and why, with a picker to send it somewhere else.
+let capBusy = {}, capErr = {}, groupBusy = false, groupErr = "";
+async function proposeGroups() {
+  groupBusy = true; groupErr = ""; render(last);
+  try { await workPost("groups"); } catch (e) { groupErr = "Grouping failed: " + e.message; }
+  groupBusy = false; tick();
+}
+function capturesEl(state, items) {
+  const caps = state.captures || [];
+  if (!caps.length) return null;
+  const box = el("div", "caps");
+  box.append(section("Recent captures", caps.length, el("span", "hint", "where each hotkey note went, and why")));
+  caps.forEach(c => {
+    const row = el("div", "cap " + c.routed);
+    const note = c.text.replace(/https?:\/\/\S+/g, m => /slack\.com/.test(m) ? "[Slack link]" : "[link]").replace(/Screenshot: \S+/, "[screenshot]").trim();
+    const where = c.routed === "new" ? "new tab" : (c.item_title || (sessionById(c.surface) || {}).title || "a tab");
+    row.append(el("span", "when", ago(new Date(c.at * 1000).toISOString())), el("span", "note", note || "(empty note)"),
+      el("span", "arrow", c.routed === "resumed" ? "→ reopened" : "→"), el("b", null, where), el("span", "why", c.reason || ""));
+    const pick = el("select");
+    pick.append(el("option", null, capBusy[c.id] ? "moving…" : "Wrong? Move to…"));
+    const nw = el("option", null, "New tab"); nw.value = "new"; if (c.routed !== "new") pick.append(nw);
+    items.filter(i => i.state !== "done" && i.id !== c.item).sort((a, b) => a.title.localeCompare(b.title))
+      .forEach(i => { const o = el("option", null, i.title); o.value = i.id; pick.append(o); });
+    pick.disabled = !!capBusy[c.id];
+    pick.onfocus = () => { editing = true; };
+    pick.onblur = () => { editing = false; };
+    pick.onchange = async () => {
+      editing = false; capBusy[c.id] = true; delete capErr[c.id]; render(last);
+      const res = await fetch("/api/capture/redirect", { method: "POST", body: JSON.stringify({ id: c.id, to: pick.value }) });
+      if (!res.ok) capErr[c.id] = (await res.json().catch(() => ({}))).error || `HTTP ${res.status}`;
+      delete capBusy[c.id]; tick();
+    };
+    row.append(pick);
+    if (capErr[c.id]) row.append(el("span", "fail", "not moved: " + capErr[c.id]));
+    // Hover lights its tab, item and goal in the map below; click opens its session (or pins its item when no tab is open).
+    const item = items.find(i => i.id === c.item);
+    const tab = sessionById(c.surface) || (item && item.tabs.map(sessionById).find(Boolean));
+    const wmap = () => document.querySelector(".wmap");
+    const keyOf = () => {  // its tab if the map draws it (exited sessions are hidden), else its item
+      const m = wmap(), on = k => m && m.querySelector(`[data-key="${CSS.escape(k)}"]`);
+      return tab && on("t:" + tab.id) ? "t:" + tab.id : item && on("i:" + item.id) ? "i:" + item.id : null;
+    };
+    row.classList.toggle("go", !!(tab || item));
+    row.title = tab ? `Click to open ${tab.title}` : item ? `${item.title} has no open tab: click to show it in the map` : "Its tab is closed";
+    row.onmouseenter = () => { const m = wmap(), k = keyOf(); if (k && m) { mapFocus = k; mapApply(m, m._chain); } };
+    row.onmouseleave = () => { const m = wmap(); if (m) { mapFocus = null; mapApply(m, m._chain); } };
+    row.onclick = e => {
+      if (e.target.closest("select")) return;
+      if (tab) fetch("/api/focus", { method: "POST", body: JSON.stringify({ workspace: tab.workspace, surface: tab.id }) });
+      else if (keyOf()) { const m = wmap(), key = keyOf(); mapPin = key; mapApply(m, m._chain); const n = m.querySelector(`[data-key="${CSS.escape(key)}"]`); if (n) n.scrollIntoView({ block: "center", behavior: "smooth" }); }
+    };
+    box.append(row);
+  });
+  return box;
+}
+
+function renderWork(state) {
+  document.documentElement.style.setProperty("--hdr", document.querySelector("header").offsetHeight + "px");  // header wraps to 2-3 rows on narrow panes
+  const w = state.work, y = scrollY;
+  const all = state.regions.flatMap(r => r.sessions);
+  const root = el("div", "work");
+  if (!w.seeded) {
+    tally.replaceChildren(el("span", null, `${all.filter(t => t.agent).length} agent tabs, no work items yet`));
+    root.append(seedPanel(w));
+    map.replaceChildren(root); scrollTo(0, y); return;
+  }
+  const items = w.items.filter(i => i.state !== "done");
+  const goals = w.groups || [];
+  const needs = items.filter(i => i.needs);
+  tally.replaceChildren(...[["waiting", needs.length, "need you"], ["working", items.filter(i => i.status === "working").length, "working"],
+    ["shell", items.filter(i => i.state === "parked" && i.status === "none").length, "parked"]].map(([k, n, label]) => {
+    const s = el("span"), d = el("span", "dot"); d.style.background = `var(--${k})`; s.append(d, el("b", null, n), " " + label); return s;
+  }));
+  const caps = capturesEl(state, w.items);
+  if (caps) root.append(caps);
+  root.append(workMap(state, w, items, goals));
+  if (pendingMerge) root.append(mergeBar());
+  map.replaceChildren(root);
+  requestAnimationFrame(() => {
+    drawMap(root.querySelector(".wmap"));
+    const pin = scrollPin && root.querySelector(".wmap .pinned");
+    if (pin) { scrollPin = false; pin.scrollIntoView({ block: "center" }); }
+  });
+  scrollTo(0, y);
+}
+
+// The work map: spaces and their tabs (left) -> work items (middle) -> goals (right), one line per link. Hover traces a chain.
+let mapFocus = null, mapPin = null;  // hover key; clicked key (stays lit until you click off it)
+const GOAL_HUE = n => `hsl(${(n * 67 + 200) % 360} 62% 62%)`;
+function workMap(state, w, items, goals) {
+  const goalIdx = new Map(goals.map((g, n) => [g.id, n]));
+  const hueOf = it => goalIdx.has(it.group) ? GOAL_HUE(goalIdx.get(it.group)) : "var(--idle)";
+  const RANK = { waiting: 0, working: 1, done: 2, idle: 3, shell: 4, none: 5 };
+  const ordered = items.slice().sort((a, b) => (goalIdx.get(a.group) ?? 99) - (goalIdx.get(b.group) ?? 99)
+    || (b.needs - a.needs) || (RANK[a.status] ?? 9) - (RANK[b.status] ?? 9) || a.title.localeCompare(b.title));
+  const itemPos = new Map(ordered.map((it, n) => [it.id, n]));
+  const itemOfTab = new Map(); items.forEach(it => it.tabs.forEach(t => itemOfTab.set(t, it)));
+  // Workspaces and their tabs ordered by where their items sit, so lines cross as little as possible.
+  const pos = t => itemOfTab.has(t.id) ? itemPos.get(itemOfTab.get(t.id).id) : 1e3;
+  const spaces = state.regions.map(r => ({ r, tabs: r.sessions.filter(t => t.agent || showShells.checked).sort((a, b) => pos(a) - pos(b)) }))
+    .filter(x => x.tabs.length)
+    .map(x => ({ ...x, at: x.tabs.reduce((s, t) => s + pos(t), 0) / x.tabs.length })).sort((a, b) => a.at - b.at);
+
+  // Relations for hover: every node knows the chain it belongs to.
+  const rel = new Map(), link = (a, b) => { (rel.get(a) || rel.set(a, new Set([a])).get(a)).add(b); (rel.get(b) || rel.set(b, new Set([b])).get(b)).add(a); };
+  items.forEach(it => { it.tabs.forEach(t => link("t:" + t, "i:" + it.id)); if (goalIdx.has(it.group)) link("i:" + it.id, "g:" + it.group); });
+  const chain = key => {  // tab -> its item and goal; item -> its tabs and goal; goal -> its items and their tabs
+    const out = new Set([key]), [kind] = key.split(":");
+    const add = k => (rel.get(k) || new Set([k])).forEach(x => out.add(x));
+    add(key);
+    if (kind === "t") [...out].filter(k => k.startsWith("i:")).forEach(add);
+    if (kind === "g") [...out].filter(k => k.startsWith("i:")).forEach(add);
+    return out;
+  };
+
+  const wrap = el("div", "wmap");
+  const L = el("div", "dcol"), M = el("div", "dcol"), R = el("div", "dcol");
+  L.append(el("div", "dhead", "Spaces and their tabs"));
+  M.append(el("div", "dhead", "Work items"));
+  R.append(el("div", "dhead", "Goals"));
+  const groupName = r => r.scratch ? "" : ((state.groups || []).find(g => g.id === r.group) || {}).name || "";
+  spaces.forEach(({ r, tabs }) => {
+    const box = el("div", "dbox ws"), h = el("div", "dtitle", r.title);
+    if (groupName(r)) h.append(el("span", "cnt", groupName(r)));
+    box.append(h);
+    tabs.forEach(t => {
+      const it = itemOfTab.get(t.id);
+      const row = el("div", "mtab " + t.status + (it ? "" : " loose"));
+      row.dataset.key = "t:" + t.id;
+      row.style.setProperty("--c", `var(--${t.status})`);
+      row.style.setProperty("--h", it ? hueOf(it) : "var(--idle)");
+      row.append(el("span", "dot"), el("span", "name", t.title), el("span", "meta", [LABEL[t.status], ago(t.since)].filter(Boolean).join(" · ")));
+      row.title = (it ? "On: " + it.title : "Not on a work item yet (filed automatically within a minute)") + "\nClick to open. Drag onto a work item to move it.";
+      row.onclick = () => fetch("/api/focus", { method: "POST", body: JSON.stringify({ workspace: t.workspace, surface: t.id }) });
+      if (t.transcript) {
+        row.draggable = true;
+        row.ondragstart = e => { dragging = t; e.dataTransfer.setData("text/plain", t.id); };
+        row.ondragend = () => { dragging = null; document.querySelectorAll(".drop").forEach(x => x.classList.remove("drop")); };
+      }
+      box.append(row);
+    });
+    L.append(box);
+  });
+
+  ordered.forEach(it => {
+    const parked = it.state === "parked" && it.status === "none";
+    const box = el("div", "mitem" + (it.needs ? " needs" : "") + (parked ? " parked" : ""));
+    box.dataset.key = "i:" + it.id;
+    box.style.setProperty("--h", hueOf(it));
+    const h = el("div", "dtitle"), name = el("span", "name", it.title);
+    h.append(name);
+    const st = it.needs ? "needs you" : parked ? "parked" : it.status === "none" ? "no open tab" : LABEL[it.status] || it.status;
+    h.append(el("span", "st " + (it.needs ? "waiting" : parked ? "shell" : it.status), st));
+    if (it.new) h.append(el("span", "tag join", "new"));
+    h.append(pencil(name, it.title, title => edit({ op: "update", id: it.id, title })));
+    h.draggable = true;
+    h.title = "Drag onto a goal to move it there, or onto another item to merge";
+    h.ondragstart = e => { draggingItem = it; e.dataTransfer.setData("text/plain", it.id); };
+    h.ondragend = () => { draggingItem = null; document.querySelectorAll(".drop").forEach(x => x.classList.remove("drop")); };
+    box.append(h);
+    const line = it.needs || parked ? it.next || it.note : "";
+    if (line) box.append(el("div", "mnext", (parked && it.waits_on && it.waits_on !== "nobody" ? `Waits on ${it.waits_on === "Robert" ? "you" : it.waits_on}: ` : "") + line));
+    const a = (it.asked_by || []).slice(-1)[0];
+    if (a) { const r = el("div", "masked"); r.append(el("b", null, a.person), " " + (a.ask || "asked"), el("span", null, " · " + ago(new Date(a.at * 1000).toISOString()))); box.append(r); }
+    else if (it.people.length) box.append(el("div", "masked", it.people.join(", ")));
+    const acts = el("div", "macts");
+    const btn = (text, fn) => { const b = el("button", null, text); b.onclick = e => { e.stopPropagation(); fn(); }; acts.append(b); };
+    if (workBusy[it.id]) acts.append(el("span", "hint", workBusy[it.id] + "…"));
+    else {
+      if (!parked) btn(armedItem === it.id + "park" ? `close ${it.tabs.length} tab${it.tabs.length === 1 ? "" : "s"}?` : "Park", () => {
+        if (!it.tabs.length || armedItem === it.id + "park") { armedItem = null; itemAct(it, "park", "Writing where it stands"); }
+        else { armedItem = it.id + "park"; render(last); setTimeout(() => { if (armedItem === it.id + "park") { armedItem = null; render(last); } }, 3000); }
+      });
+      if (it.resumable && !it.tabs.length) btn("Resume", () => itemAct(it, "resume", "Opening its last session"));
+      btn("Done", () => edit({ op: "update", id: it.id, state: "done" }));
+    }
+    const m = workMsg[it.id];
+    if (m && m.text) acts.append(el("span", "hint" + (m.ok ? "" : " fail"), m.text));
+    box.append(acts);
+    box.ondragover = e => { if ((dragging && dragging.transcript) || (draggingItem && draggingItem.id !== it.id)) { e.preventDefault(); box.classList.add("drop"); } };
+    box.ondragleave = e => { if (!box.contains(e.relatedTarget)) box.classList.remove("drop"); };
+    box.ondrop = e => {
+      e.preventDefault(); box.classList.remove("drop");
+      if (dragging && dragging.transcript) { const tr = dragging.transcript; dragging = null; edit({ op: "attach", transcript: tr, item: it.id }); }
+      else if (draggingItem && draggingItem.id !== it.id) { pendingMerge = { from: draggingItem, into: it }; draggingItem = null; render(last); }
+    };
+    M.append(box);
+  });
+  const zone = el("div", "dbox outbox", "Drop a tab here to make it its own work item");
+  zone.ondragover = e => { if (dragging && dragging.transcript) { e.preventDefault(); zone.classList.add("drop"); } };
+  zone.ondragleave = () => zone.classList.remove("drop");
+  zone.ondrop = e => { e.preventDefault(); zone.classList.remove("drop"); if (dragging && dragging.transcript) { const t = dragging; dragging = null; edit({ op: "split", transcript: t.transcript, title: t.title }); } };
+  M.append(zone);
+
+  const goalBox = g => {
+    const mine = items.filter(i => g ? i.group === g.id : !goalIdx.has(i.group));
+    if (!g && !mine.length) return null;
+    const box = el("div", "mgoal");
+    if (g) box.dataset.key = "g:" + g.id;
+    box.style.setProperty("--h", g ? GOAL_HUE(goalIdx.get(g.id)) : "var(--idle)");
+    const h = el("div", "dtitle"), name = el("span", "name", g ? g.title : "No goal yet");
+    h.append(name);
+    if (g) h.append(pencil(name, g.title, title => edit({ op: "group-rename", group: g.id, title })));
+    box.append(h);
+    const n = mine.filter(i => i.needs).length, open = mine.reduce((s, i) => s + i.tabs.length, 0);
+    box.append(el("div", "masked", `${mine.length} item${mine.length === 1 ? "" : "s"} · ${open} open tab${open === 1 ? "" : "s"}` + (n ? ` · ${n} need you` : "")));
+    box.ondragover = e => { if (draggingItem) { e.preventDefault(); box.classList.add("drop"); } };
+    box.ondragleave = () => box.classList.remove("drop");
+    box.ondrop = e => { e.preventDefault(); box.classList.remove("drop"); if (draggingItem) { const it = draggingItem; draggingItem = null; edit({ op: "group-set", id: it.id, group: g ? g.id : "" }); } };
+    return box;
+  };
+  goals.forEach(g => R.append(goalBox(g)));
+  const loose = goalBox(null); if (loose) R.append(loose);
+  const again = el("button", "wbtn", groupBusy ? "Reading your items…" : goals.length ? "Regroup by goal" : "Group by goal");
+  again.disabled = groupBusy; again.onclick = proposeGroups;
+  R.append(again);
+  if (groupErr) R.append(el("p", "fail", groupErr));
+
+  const svg = document.createElementNS(SVGNS, "svg"); svg.classList.add("links");
+  wrap.append(svg, L, M, R);
+  wrap.onmouseover = e => { const n = e.target.closest("[data-key]"); const k = n ? n.dataset.key : null; if (k !== mapFocus) { mapFocus = k; mapApply(wrap, chain); } };
+  wrap.onclick = e => {  // click a box to keep its chain lit; click it again or anywhere off a box to clear
+    if (e.target.closest("button, input, select, a")) return;
+    const n = e.target.closest("[data-key]"), k = n ? n.dataset.key : null;
+    mapPin = k && k !== mapPin ? k : null;
+    mapApply(wrap, chain);
+  };
+  wrap.onmouseleave = () => { mapFocus = null; mapApply(wrap, chain); };
+  wrap._chain = chain;
+  return wrap;
+}
+function mapApply(wrap, chain) {
+  if (mapPin && !wrap.querySelector(`[data-key="${CSS.escape(mapPin)}"]`)) mapPin = null;  // its tab or item is gone
+  const key = mapPin || mapFocus, on = key ? chain(key) : null;
+  wrap.classList.toggle("focused", !!on);
+  wrap.querySelectorAll("[data-key]").forEach(n => n.classList.toggle("pinned", n.dataset.key === mapPin));
+  wrap.querySelectorAll("[data-key]").forEach(n => n.classList.toggle("on", !!on && on.has(n.dataset.key)));
+  wrap.querySelectorAll("path").forEach(p => p.classList.toggle("on", !!on && on.has(p.dataset.a) && on.has(p.dataset.b)));
+}
+function drawMap(wrap) {
+  if (!wrap) return;
+  const svg = wrap.querySelector("svg.links"), base = wrap.getBoundingClientRect();
+  svg.setAttribute("width", base.width); svg.setAttribute("height", base.height);
+  svg.replaceChildren();
+  const box = k => wrap.querySelector(`[data-key="${CSS.escape(k)}"]`);
+  const fan = {};
+  const curve = (a, b, ka, kb, width) => {
+    const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect();
+    const n = fan[kb] = (fan[kb] || 0) + 1;
+    const x1 = ra.right - base.left, y1 = ra.top + Math.min(ra.height / 2, 14) - base.top;
+    const x2 = rb.left - base.left, y2 = rb.top - base.top + Math.min(10 + n * 5, rb.height - 6);
+    const mid = (x1 + x2) / 2;
+    svg.append(svgEl("path", { d: `M${x1},${y1} C${mid},${y1} ${mid},${y2} ${x2},${y2}`, stroke: getComputedStyle(b).getPropertyValue("--h"),
+      "stroke-width": width, "data-a": ka, "data-b": kb }));
+  };
+  wrap.querySelectorAll(".mitem[data-key]").forEach(it => {
+    const ik = it.dataset.key;
+    const g = [...wrap.querySelectorAll(".mgoal[data-key]")].find(x => wrap._chain(ik).has(x.dataset.key));
+    if (g) curve(it, g, ik, g.dataset.key, 3);
+  });
+  wrap.querySelectorAll(".mtab[data-key]").forEach(t => {
+    const tk = t.dataset.key, it = [...wrap._chain(tk)].find(k => k.startsWith("i:"));
+    const b = it && box(it);
+    if (b) curve(t, b, tk, it, 2);
+  });
+  mapApply(wrap, wrap._chain);
+}
+
 function render(state) {
   if (!state) return;
   if (tlSession) {  // keep the open drawer's status current (the waterfall reads it to tell running from finished)
     const fresh = state.regions.flatMap(r => r.sessions).find(x => x.id === tlSession.id);
     if (fresh) tlSession.status = fresh.status;
   }
+  if (view === "work" && state.work) return renderWork(state);
   const parentOf = Object.fromEntries(state.edges.map(e => [e.child, e.parent]));
   const counts = { waiting: 0, done: 0, working: 0 };
   let subRunning = 0;
@@ -1136,11 +1710,18 @@ function render(state) {
   scrollTo(0, y);
 }
 
+let seenCame = 0, scrollPin = false;
 async function tick() {
   try {
     const state = await (await fetch("/api/state")).json();
     last = state;
-    if (!dragging && !draggingRegion && !editing) render(last);  // re-rendering mid-drag or mid-rename would drop it
+    const came = state.came_from;  // the tab you were in when you switched to the Overworld: light it and scroll to it
+    if (came && came.at > seenCame) {
+      if (seenCame || Date.now() / 1000 - came.at < 60) { mapPin = "t:" + came.id; sel = came.id; scrollPin = true; }
+      seenCame = came.at;
+    }
+    if (!dragging && !draggingRegion && !draggingItem && !editing) render(last);  // re-rendering mid-drag or mid-rename would drop it
+    if (scrollPin && view !== "work") { scrollPin = false; select(sel); }
     renderInbox();  // no-op while the inbox is closed
   } catch (e) {
     map.replaceChildren(el("div", "err", "Overworld server not reachable: " + e.message));
@@ -1148,6 +1729,8 @@ async function tick() {
 }
 tick();
 setInterval(tick, 3000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) tick(); });
+window.addEventListener("focus", tick);
 
 // Weekly usage meter. Server polls Claude's usage endpoint every 5 min and logs each reading; the page refreshes every minute.
 const usageBox = document.getElementById("usage");
