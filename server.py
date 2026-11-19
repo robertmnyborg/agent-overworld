@@ -1813,6 +1813,198 @@ def redirect_capture(cid, to):
     return row
 
 
+# ---------- Galaxy: goals = systems, work items = planets, sessions = the planet's history. ----------
+# Links between items are inferred from transcripts (shared files, repos, Slack threads, spinoff briefs, people); nothing new is recorded.
+FACTS = Path.home() / ".overworld" / "facts.json"  # transcript -> facts, keyed by mtime so a restart doesn't re-read 500 MB
+DORMANT_DAYS = 5  # an item with no session activity for this long and no live tab needing anything reads as dormant
+HOME = str(Path.home())
+NOISE_PATHS = ("/tmp/", "/private/tmp/", "/private/var/", f"{HOME}/.claude/projects/", f"{HOME}/.overworld/captures/")
+GENERIC_FILE_ITEMS = 6  # a file touched by more items than this (a global CLAUDE.md, MEMORY.md) links nothing
+PR_LINK = re.compile(r"https://github\.com/[\w.-]+/[\w.-]+/pull/\d+")
+EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
+_facts_lock = threading.Lock()
+_facts = None
+_git_root_cache = {}
+
+
+def project_of(path):
+    """Project folder a path belongs to: its git root, else the ~/Projects/<name> folder (every one keeps a CONTEXT.md). None for home."""
+    root = git_root(path)
+    if root:
+        return root
+    rel = Path(path).parts[len(Path(HOME).parts):]
+    return f"{HOME}/Projects/{rel[1]}" if len(rel) >= 2 and rel[0] == "Projects" else None
+
+
+def git_root(path):
+    """Nearest folder holding .git above path; None for home itself or outside any repo."""
+    p = Path(path)
+    for d in [p, *p.parents]:
+        key = str(d)
+        if key in _git_root_cache:
+            return _git_root_cache[key]
+        if (d / ".git").exists():
+            root = None if key == HOME else key
+            _git_root_cache[key] = root
+            return root
+        if key in (HOME, "/"):
+            break
+    _git_root_cache[str(p)] = None
+    return None
+
+
+def transcript_facts(path):
+    """One pass over a transcript: time span, prompt times, cwd, files edited, repos, Slack threads, PRs, handoff briefs, sub-agent count."""
+    first = lastt = None
+    prompts, files, cwds, threads, prs, briefs_in = [], set(), set(), set(), set(), set()
+    with open(path, "rb") as f:
+        for raw in f:
+            if b'"timestamp"' not in raw:
+                continue
+            try:
+                e = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+            ts = e.get("timestamp")
+            if not ts or e.get("type") not in ("user", "assistant"):
+                continue
+            t = _epoch(ts)
+            first = first or t
+            lastt = t
+            if e.get("cwd"):
+                cwds.add(e["cwd"])
+            if e["type"] == "user" and _is_prompt(e):
+                text = _user_text(e)
+                prompts.append(t)
+                for m in SLACK_LINK.finditer(text):
+                    k = slack_thread(m.group(0))
+                    if k:
+                        threads.add(k)
+                briefs_in.update(re.findall(r"/\.overworld/handoffs/[\w.-]+\.md", text))
+            elif e["type"] == "assistant":
+                for b in _blocks(e):
+                    if b.get("type") == "text":
+                        prs.update(PR_LINK.findall(b.get("text", "")))
+                    elif b.get("type") == "tool_use" and b.get("name") in EDIT_TOOLS:
+                        fp = (b.get("input") or {}).get("file_path") or (b.get("input") or {}).get("notebook_path")
+                        if fp:
+                            files.add(fp)
+    sub = Path(path).with_suffix("") / "subagents"
+    repos = {r for r in (project_of(c) for c in cwds | {str(Path(f).parent) for f in files if not f.startswith(NOISE_PATHS)}) if r}
+    return {"first": first, "last": lastt, "prompts": prompts[-400:], "cwd": sorted(cwds)[:3],
+            "files": sorted(files), "repos": sorted(repos), "threads": sorted(threads), "prs": sorted(prs),
+            "briefs_out": sorted(f.split("/.overworld")[1] for f in files if "/.overworld/handoffs/" in f),
+            "briefs_in": sorted(b[len("/.overworld"):] for b in briefs_in),
+            "subagents": len(list(sub.glob("agent-*.jsonl"))) if sub.is_dir() else 0}
+
+
+def facts_for(paths):
+    """Facts for each transcript, re-read only when its mtime changed. Missing transcripts are left out."""
+    global _facts
+    with _facts_lock:
+        if _facts is None:
+            _facts = json.loads(FACTS.read_text()) if FACTS.exists() else {}
+        out, changed = {}, False
+        for p in paths:
+            try:
+                mt = os.path.getmtime(p)
+            except OSError:
+                continue
+            cached = _facts.get(p)
+            if not cached or cached["mtime"] != mt:
+                cached = {"mtime": mt, **transcript_facts(p)}
+                _facts[p], changed = cached, True
+            out[p] = cached
+        if changed:
+            tmp = FACTS.with_suffix(".tmp")
+            tmp.write_text(json.dumps(_facts))
+            tmp.replace(FACTS)
+        return out
+
+
+def _shared(sets_by_item, kind, generic=None):
+    """Pairs of items sharing a value in their sets -> link rows. Values held by more than `generic` items are ignored."""
+    holders = {}
+    for iid, vals in sets_by_item.items():
+        for v in vals:
+            holders.setdefault(v, []).append(iid)
+    pairs = {}
+    for v, ids in holders.items():
+        if len(ids) < 2 or (generic and len(ids) > generic):
+            continue
+        for a in range(len(ids)):
+            for b in range(a + 1, len(ids)):
+                pairs.setdefault(tuple(sorted((ids[a], ids[b]))), []).append(v)
+    return [{"a": a, "b": b, "kind": kind, "via": sorted(vs)} for (a, b), vs in pairs.items()]
+
+
+def galaxy(st):
+    """Systems (goals), planets (items) with derived dormant flag, and inferred links between items."""
+    w = load_work()
+    view = {i["id"]: i for i in work_view(st)["items"]} if st["regions"] else {}
+    facts = facts_for([tr for i in w["items"].values() for tr in i["sessions"]])
+    now, planets = time.time(), []
+    files, repos, threads, people, out_b, in_b = {}, {}, {}, {}, {}, {}
+    for i in w["items"].values():
+        fs = [facts[tr] for tr in i["sessions"] if tr in facts]
+        v = view.get(i["id"], {})
+        last_active = max([f["last"] or 0 for f in fs] + [i.get("updated", 0)])
+        live_need = v.get("status") in ("waiting", "working")
+        dormant = i["state"] == "active" and not live_need and now - last_active > DORMANT_DAYS * 86400
+        iid = i["id"]
+        files[iid] = {f for x in fs for f in x["files"] if not f.startswith(NOISE_PATHS) and "/.overworld/" not in f}
+        repos[iid] = {r for x in fs for r in x["repos"]}
+        threads[iid] = set(i.get("sources", [])) | {t for x in fs for t in x["threads"]}
+        people[iid] = {p.split()[0].lower() for p in i.get("people", []) if p}
+        out_b[iid] = {b for x in fs for b in x["briefs_out"]}
+        in_b[iid] = {b for x in fs for b in x["briefs_in"]}
+        planets.append({"id": iid, "title": i["title"], "goal": i.get("goal", ""), "group": i.get("group", ""), "state": i["state"],
+                        "dormant": dormant, "last_active": last_active, "status": v.get("status", "none"), "needs": v.get("needs", False),
+                        "next": v.get("next", i.get("next", "")), "waits_on": i.get("waits_on", ""), "people": i.get("people", []),
+                        "tabs": v.get("tabs", []), "sessions": len(i["sessions"]), "repos": sorted(repos[iid]),
+                        "prs": len({p for x in fs for p in x["prs"]}), "files": len(files[iid]), "threads": len(threads[iid])})
+    links = (_shared(files, "file", GENERIC_FILE_ITEMS) + _shared(threads, "thread") +
+             _shared(repos, "project", GENERIC_FILE_ITEMS * 2) + _shared(people, "person", GENERIC_FILE_ITEMS))
+    for a, briefs in out_b.items():  # spinoff: item a wrote a handoff brief that a session of item b was started on
+        for b, got in in_b.items():
+            via = sorted(briefs & got)
+            if a != b and via:
+                links.append({"a": a, "b": b, "kind": "spinoff", "via": [Path(x).stem for x in via]})
+    groups = sorted(w.get("groups", {}).values(), key=lambda g: g.get("order", 0))
+    return {"systems": [{"id": g["id"], "title": g["title"]} for g in groups], "planets": planets, "links": links,
+            "dormant_days": DORMANT_DAYS, "at": now}
+
+
+def planet(item_id, st):
+    """One item's history: each session's span, prompt times, spinoff parent within the item, sub-agents, files, PRs, threads."""
+    w = load_work()
+    i = w["items"].get(item_id)
+    if not i:
+        return {"error": "no such item"}
+    facts = facts_for(i["sessions"])
+    live = live_tabs(st) if st["regions"] else {}
+    wrote = {b: tr for tr in i["sessions"] if tr in facts for b in facts[tr]["briefs_out"]}
+    sessions = []
+    for tr in i["sessions"]:
+        f, m = facts.get(tr), i.get("meta", {}).get(tr, {})
+        if not f:
+            continue
+        t = live.get(tr)
+        parent = next((wrote[b] for b in f["briefs_in"] if b in wrote and wrote[b] != tr), None)
+        sessions.append({"transcript": tr, "title": (t or {}).get("title") or m.get("title") or Path(tr).stem[:8],
+                         "first": f["first"], "last": f["last"], "prompts": f["prompts"], "parent": parent,
+                         "brief": next((Path(b).stem for b in f["briefs_in"]), None), "subagents": f["subagents"],
+                         "live": t["id"] if t else None, "workspace": t["workspace"] if t else None,
+                         "status": t["status"] if t else "closed", "where": m.get("workspace_title", ""), "agent": m.get("agent", "claude")})
+    sessions.sort(key=lambda s: s["first"] or 0)
+    fs = [facts[tr] for tr in i["sessions"] if tr in facts]
+    return {"id": item_id, "title": i["title"], "goal": i.get("goal", ""), "note": i.get("note", ""), "next": i.get("next", ""),
+            "waits_on": i.get("waits_on", ""), "people": i.get("people", []), "state": i["state"], "sessions": sessions,
+            "files": sorted({f for x in fs for f in x["files"] if not f.startswith(NOISE_PATHS)}),
+            "repos": sorted({r for x in fs for r in x["repos"]}), "prs": sorted({p for x in fs for p in x["prs"]}),
+            "threads": sorted(set(i.get("sources", [])) | {t for x in fs for t in x["threads"]})}
+
+
 class Handler(BaseHTTPRequestHandler):
     def _send(self, code, body, ctype="application/json"):
         data = body if isinstance(body, bytes) else json.dumps(body).encode()
@@ -1827,6 +2019,7 @@ class Handler(BaseHTTPRequestHandler):
             st = state()
             st["work"] = work_view(st) if st["regions"] else {"seeded": False, "items": [], "unsorted": [], "proposal": None}
             st["captures"] = recent_captures()
+            st["page"] = (HERE / "index.html").stat().st_mtime  # the page reloads itself when this changes
             self._send(200, st)
         elif self.path.startswith("/api/action?surface="):
             # On demand, for the reply view on a session the background pass skips (not "your turn").
@@ -1850,6 +2043,10 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, handoffs(self.path.split("=", 1)[1]))
         elif self.path.startswith("/api/steps?surface="):
             self._send(200, recent_steps(self.path.split("=", 1)[1]))
+        elif self.path == "/api/galaxy":
+            self._send(200, galaxy(state()))
+        elif self.path.startswith("/api/planet?id="):
+            self._send(200, planet(self.path.split("=", 1)[1], state()))
         elif self.path == "/api/usage":
             self._send(200, usage())
         elif self.path.startswith("/api/timeline?surface="):

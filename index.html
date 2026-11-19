@@ -374,6 +374,134 @@
   body.dragging-session .wzone { display: block; }
   .wzone.drop { border-color: var(--working); color: var(--text); }
   .err { padding: 16px; color: var(--waiting); }
+  /* Galaxy view */
+  main.gmode { padding: 0; display: block; }
+  .galaxy { position: relative; height: calc(100vh - var(--hh, 90px)); overflow: hidden; background: radial-gradient(ellipse at 50% 40%, #191b28 0%, var(--bg) 70%); }
+  .gsvg { width: 100%; height: 100%; display: block; cursor: grab; user-select: none; }
+  .gsvg.panning { cursor: grabbing; }
+  .orbit { fill: none; stroke: var(--line); stroke-width: 1; vector-effect: non-scaling-stroke; stroke-dasharray: 2 5; }
+  .sun { fill: #2a2416; stroke: #f5c56b; stroke-width: 1.5; vector-effect: non-scaling-stroke; cursor: pointer; filter: drop-shadow(0 0 18px rgba(245,197,107,.35)); }
+  .sun.nogoal { fill: #1f2130; stroke: var(--idle); filter: none; }
+  .gsys:hover .sun { stroke-width: 3; }
+  .slabel { fill: var(--text); font-weight: 600; font-size: calc(15px / var(--k, 1)); letter-spacing: .03em; pointer-events: none; }
+  .scount { fill: #f5c56b; font-size: calc(11px / var(--k, 1)); pointer-events: none; }
+  .gplanet { cursor: pointer; }
+  .gplanet .body { fill: var(--idle); stroke: var(--bg); stroke-width: 2; vector-effect: non-scaling-stroke; }
+  .gplanet .halo { fill: none; stroke: transparent; stroke-width: 2.5; vector-effect: non-scaling-stroke; }
+  .gplanet.live .body { fill: #8a8ea3; }
+  .gplanet.st-working .body { fill: var(--working); }
+  .gplanet.st-done .body { fill: var(--done); }
+  .gplanet.needs .body { fill: var(--waiting); }
+  .gplanet.needs .halo { stroke: var(--waiting); animation: beacon 1.8s ease-out infinite; transform-box: fill-box; transform-origin: center; }
+  @keyframes beacon { 0% { opacity: 1; transform: scale(.85); } 100% { opacity: 0; transform: scale(1.5); } }
+  .gplanet.dormant { opacity: .38; }
+  .gplanet.dormant .body { fill: #3a3d50; }
+  .gplanet:hover .body, .gplanet.pin .body { stroke: var(--text); }
+  .plabel { fill: var(--text); font-size: calc(11.5px / var(--k, 1)); pointer-events: none; paint-order: stroke; stroke: var(--bg); stroke-width: calc(3px / var(--k, 1)); }
+  .pcount { fill: var(--bg); font-size: 13px; font-weight: 700; pointer-events: none; }
+  .gsvg.far .plabel { display: none; }
+  .gsvg.far .gplanet.near.pin .plabel { display: inline; }
+  .flare { fill: none; stroke: transparent; stroke-width: 3; vector-effect: non-scaling-stroke; pointer-events: none; }
+  .gsys.alert .flare { stroke: var(--waiting); animation: beacon 1.6s ease-out infinite; transform-box: fill-box; transform-origin: center; }
+  .gsys.alert .sun { stroke: var(--waiting); }
+  .gsys.alert .scount { fill: var(--waiting); font-weight: 600; }
+  .gcrumbs .gnext { color: var(--bg); background: var(--waiting); border-radius: 5px; padding: 1px 8px; margin-left: 6px; font-weight: 600; }
+  .ghub polygon { fill: #232637; stroke: #9aa0c0; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+  .ghub { cursor: default; }
+  .ghub.near polygon { stroke: var(--text); fill: #2f3350; }
+  .hlabel { fill: #9aa0c0; font-size: calc(10.5px / var(--k, 1)); pointer-events: none; paint-order: stroke; stroke: var(--bg); stroke-width: calc(3px / var(--k, 1)); }
+  .groad { fill: none; stroke: #6d7392; stroke-width: 1.2; vector-effect: non-scaling-stroke; stroke-dasharray: 4 4; opacity: .5; pointer-events: none; }
+  .groad.on { opacity: 1; stroke: #c3c8e6; stroke-width: 2; }
+  .groad.hidden, .ghub.hidden { display: none; }
+  .gsvg.far .ghubs { display: none; }
+  .gsvg.focusing .groad:not(.on) { opacity: .08; }
+  .gsvg.focusing .ghub:not(.near), .gsvg.hubfocus .ghub:not(.near) { opacity: .25; }
+  .gsvg.hubfocus .gplanet:not(.near) { opacity: .18; }
+  .gsvg.hubfocus .groad:not(.on) { opacity: .06; }
+  .gsvg.hubfocus .gplanet.near .plabel { display: inline; }
+  .gsvg.incity .gplanet:not(.pin) { opacity: .1; }
+  .gsvg.incity .ghubs, .gsvg.incity .glinks, .gsvg.incity .gsys { opacity: .12; }
+  .cityring { fill: rgba(76,141,255,.04); stroke: var(--line); stroke-dasharray: 3 5; vector-effect: non-scaling-stroke; }
+  .spoke { stroke: #3a3e55; stroke-width: 1.2; vector-effect: non-scaling-stroke; }
+  .cityroad { fill: none; stroke: var(--tool); stroke-width: 2; vector-effect: non-scaling-stroke; }
+  .gcity .body { fill: #3a3d50; stroke: var(--bg); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+  .gcity .halo { fill: none; stroke: transparent; stroke-width: 2.5; vector-effect: non-scaling-stroke; }
+  .gcity.live { cursor: pointer; }
+  .gcity.live .body { fill: #8a8ea3; }
+  .gcity.st-working .body { fill: var(--working); }
+  .gcity.st-done .body { fill: var(--done); }
+  .gcity.st-waiting .body { fill: var(--waiting); }
+  .gcity.st-waiting .halo { stroke: var(--waiting); animation: beacon 1.8s ease-out infinite; transform-box: fill-box; transform-origin: center; }
+  .gcity.live:hover .body { stroke: var(--text); }
+  .clabel { fill: var(--text); font-size: calc(11.5px / var(--k, 1)); pointer-events: none; paint-order: stroke; stroke: var(--bg); stroke-width: calc(3px / var(--k, 1)); }
+  .gshapes text { fill: var(--muted); font-size: 11px; }
+  .gshapes .lg-planet { fill: #8a8ea3; }
+  .gshapes .lg-city { fill: #8a8ea3; }
+  .gshapes .lg-hub { fill: #232637; stroke: #9aa0c0; }
+  .gshapes .sun { filter: none; }
+  .glink { fill: none; stroke-width: 1.6; vector-effect: non-scaling-stroke; opacity: .55; pointer-events: none; }
+  .glink.hidden { display: none; }
+  .k-spinoff { stroke: var(--tool); --sw: var(--tool); }
+  .k-thread { stroke: #4fd1c5; --sw: #4fd1c5; }
+  .k-file { stroke: #e6e7ee; --sw: #e6e7ee; }
+  .k-project { stroke: #7a7f99; stroke-dasharray: 5 4; --sw: #7a7f99; }
+  .k-person { stroke: #ff9fb3; stroke-dasharray: 1 4; --sw: #ff9fb3; }
+  .garrowhead { fill: var(--tool); }
+  .gsvg.focusing .glink { opacity: .08; }
+  .gsvg.focusing .glink.on { opacity: 1; stroke-width: 2.4; }
+  .gsvg.focusing .gplanet:not(.near) { opacity: .18; }
+  .gsvg.focusing:not(.far) .gplanet.near .plabel { display: inline; }
+  .gcrumbs .gsort { color: var(--waiting); border: 1px solid var(--waiting); border-radius: 5px; padding: 1px 7px; margin-left: 6px; }
+  .gcrumbs { position: absolute; top: 12px; left: 16px; display: flex; gap: 6px; align-items: center; background: rgba(18,19,26,.85); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
+  .gcrumbs button { background: none; border: 0; color: var(--working); font: inherit; cursor: pointer; padding: 0; }
+  .gcrumbs .cur { color: var(--text); font-weight: 600; }
+  .gcrumbs .sep { color: var(--muted); }
+  .gcrumbs .gfit { margin-left: 10px; color: var(--muted); border: 1px solid var(--line); border-radius: 5px; padding: 1px 7px; }
+  .glegend { position: absolute; left: 16px; bottom: 14px; display: flex; flex-direction: column; gap: 3px; background: rgba(18,19,26,.85); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; color: var(--muted); max-width: 340px; }
+  .glegend label { margin: 0; display: flex; align-items: center; gap: 4px; }
+  .glegend .swatch { display: inline-block; width: 18px; height: 0; border-top: 2px solid var(--sw); }
+  .glegend .k-project .swatch, .glegend .k-person .swatch { border-top-style: dashed; }
+  .glegend hr { border: 0; border-top: 1px solid var(--line); width: 100%; margin: 4px 0; }
+  .ghint { color: var(--muted); font-size: 11px; margin-top: 4px; }
+  .gtip { position: absolute; z-index: 3; max-width: 320px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; pointer-events: none; display: flex; flex-direction: column; gap: 3px; box-shadow: 0 6px 24px rgba(0,0,0,.4); }
+  .gtip[hidden] { display: none; }
+  .muted { color: var(--muted); }
+  #gplanet { position: fixed; top: 0; right: 0; bottom: 0; width: min(640px, 48vw); background: var(--panel); border-left: 1px solid var(--line); overflow-y: auto; padding: 14px 18px 40px; z-index: 5; box-shadow: -8px 0 30px rgba(0,0,0,.35); }
+  #gplanet[hidden] { display: none; }
+  #gplanet h2 { font-size: 16px; margin: 0; flex: 1; }
+  #gplanet h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 18px 0 6px; }
+  #gplanet p { margin: 6px 0; }
+  .gp-head { display: flex; align-items: center; gap: 10px; }
+  .gp-meta { margin-top: 6px; }
+  .gp-goal { color: var(--text); font-style: italic; }
+  .gp-acts { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  .chip { display: inline-block; border: 1px solid var(--line); border-radius: 10px; padding: 0 7px; font-size: 11px; color: var(--muted); margin-left: 6px; }
+  .chip.st-waiting { color: var(--waiting); border-color: var(--waiting); margin-left: 0; }
+  .chip.st-working { color: var(--working); border-color: var(--working); margin-left: 0; }
+  .chip.st-done { color: var(--done); border-color: var(--done); margin-left: 0; }
+  .chip.st-idle, .chip.st-none { margin-left: 0; }
+  .chip[class*="k-"] { border-color: var(--sw); color: var(--text); stroke: none; }
+  .gp-links { display: flex; flex-direction: column; gap: 4px; }
+  .gp-link { text-align: left; background: none; border: 1px solid var(--line); border-radius: 6px; color: inherit; font: inherit; padding: 6px 8px; cursor: pointer; }
+  .gp-link:hover { border-color: var(--muted); }
+  .gp-list { margin: 0; padding-left: 18px; color: var(--muted); }
+  .gp-list a { color: var(--working); }
+  #gplanet details { margin-top: 14px; color: var(--muted); }
+  .ghistwrap { overflow-x: auto; }
+  .ghist { display: block; }
+  .gday { stroke: var(--line); stroke-width: 1; }
+  .gdaylabel { fill: var(--muted); font-size: 10px; }
+  .grlabel { fill: var(--text); font-size: 11.5px; }
+  .grbar { fill: #3a3d50; }
+  .grow.live .grbar { fill: var(--idle); }
+  .grow.live.st-working .grbar { fill: var(--working); }
+  .grow.live.st-waiting .grbar { fill: var(--waiting); }
+  .grow.live.st-done .grbar { fill: var(--done); }
+  .grow.live { cursor: pointer; }
+  .grow.live:hover .grlabel { text-decoration: underline; }
+  .grtick { stroke: var(--text); stroke-width: 1; opacity: .55; }
+  .grsub { fill: var(--tool); font-size: 10px; }
+  .grspin { fill: none; stroke: var(--tool); stroke-width: 1.5; }
 </style>
 </head>
 <body>
@@ -384,8 +512,9 @@
   <button class="add" id="autoAll" title="Name every workspace and session from its conversation (key: a)">✨ Auto-name all</button>
   <button class="add" id="newGroup" title="New empty group">+ New group</button>
   <button class="add" id="inboxBtn" title="Every session and background agent in one list (key: i)">Inbox</button>
+  <button class="add" id="galaxyBtn" title="Goals as star systems, work items as planets, links between them (key: g)">Galaxy</button>
   <button class="add" id="viewBtn" title="Switch between work items and tabs (key: w)">Tabs view</button>
-  <span class="hint">drag a session onto another region to move it, or onto blank group space for its own workspace · keys: arrows move · r reply (to all ticked, if any) · Space tick · Enter open · Esc clear · a auto-name · i inbox · w work/tabs · ⌘⇧1 back</span>
+  <span class="hint">drag a session onto another region to move it, or onto blank group space for its own workspace · keys: arrows move · r reply (to all ticked, if any) · Space tick · Enter open · Esc clear · a auto-name · i inbox · w work/tabs · g galaxy · ⌘⇧1 back</span>
   <label><input type="checkbox" id="showShells"> show plain shells</label>
 </header>
 <main id="map"></main>
@@ -1137,13 +1266,614 @@ document.addEventListener("keydown", e => {
 });
 setInterval(loadTimeline, 3000);
 
+// ---------- Galaxy view: goals are star systems, work items are planets, links are what items share. Flat; pan and zoom, no globe. ----------
+// Galaxy (all goals) -> system (one goal, click its sun) -> planet (one item: its sessions as a family tree over time, in the side panel).
+const GKINDS = { spinoff: "spinoff", thread: "same Slack thread", file: "same files", project: "same project", person: "same person" };
+const GLINES = ["spinoff", "thread", "file", "person"];  // drawn as lines; projects are drawn as hubs with roads instead
+const GDEFAULT = { spinoff: true, thread: true, file: true, project: true, person: false };  // person links show on hover only, or they'd be a tangle
+const HUB_MAX = 12;  // a project folder used by more items than this is too generic to be a hub
+const SLACK_DOMAIN = "piiqdev";
+const G = { data: null, sig: "", fetching: false, fetchedAt: 0, cam: null, sys: null, planet: null, pinned: null,
+  kinds: { ...GDEFAULT }, showDormant: true, pos: {}, suns: {}, wrap: null, svg: null, world: null, tip: null, panel: null, detail: null };
+try { Object.assign(G.kinds, JSON.parse(localStorage.getItem("ow.gkinds2") || "{}")); G.showDormant = localStorage.getItem("ow.gdormant") !== "0"; } catch (e) {}
+
+async function galaxyFetch(force) {
+  if (G.fetching || (!force && Date.now() - G.fetchedAt < 30000)) return;
+  G.fetching = true;
+  try {
+    const d = await (await fetch("/api/galaxy")).json();
+    G.fetchedAt = Date.now();
+    const sig = JSON.stringify([d.systems, d.planets.map(p => [p.id, p.group, p.dormant, p.sessions, p.title]), d.links]);
+    G.data = d;
+    if (sig !== G.sig) { G.sig = sig; G.wrap = null; }  // structure changed: rebuild; status-only changes are patched in place
+    if (view === "galaxy") render(last);
+  } catch (e) { console.log("[overworld] galaxy fetch failed", e.message); }
+  G.fetching = false;
+}
+
+function gSystems() {
+  const d = G.data, ids = new Set(d.systems.map(s => s.id));
+  const systems = d.systems.map(s => ({ ...s }));
+  if (d.planets.some(p => !ids.has(p.group))) systems.push({ id: "", title: "No goal yet" });
+  return systems;
+}
+function gVisible() { return G.data.planets.filter(p => G.showDormant || !p.dormant || p.needs); }
+
+// Planets sit on rings around their goal's sun: needs-you first, then working, then most recently active; dormant on the outer rings.
+function gLayout() {
+  const rank = p => (p.needs ? 0 : p.status === "working" ? 1 : p.dormant ? 3 : 2);
+  const systems = gSystems(), planets = gVisible(), pos = {}, suns = {};
+  const bySys = Object.fromEntries(systems.map(s => [s.id, []]));
+  planets.forEach(p => (bySys[p.group] || bySys[""]).push(p));
+  let maxR = 260;
+  const rings = {};
+  systems.forEach(s => {
+    const list = bySys[s.id].sort((a, b) => rank(a) - rank(b) || b.last_active - a.last_active);
+    const placed = [];
+    let ring = 0, i = 0;
+    while (i < list.length) {
+      const r = 175 + ring * 118, cap = Math.max(6, Math.floor((2 * Math.PI * r) / 118));
+      const take = list.slice(i, i + cap);
+      take.forEach((p, k) => placed.push({ p, r, a: (k / take.length) * 2 * Math.PI - Math.PI / 2 + ring * 0.35 }));
+      i += take.length; ring++;
+    }
+    rings[s.id] = placed;
+    maxR = Math.max(maxR, 175 + Math.max(0, ring - 1) * 118 + 70);
+  });
+  // Pack systems by their own size in rows aimed at a screen-shaped (16:10) block, so a big goal doesn't make every cell big.
+  const GAP = 150, reachOf = id => rings[id].reduce((m, q) => Math.max(m, q.r), 120) + 60;
+  const area = systems.reduce((a, s) => a + (2 * reachOf(s.id) + GAP) ** 2, 0), rowW = Math.sqrt(area * 1.6);
+  const rows = [[]];
+  let wNow = 0;
+  systems.forEach(s => { const d = 2 * reachOf(s.id) + GAP; if (wNow + d > rowW * 1.15 && rows[rows.length - 1].length) { rows.push([]); wNow = 0; } rows[rows.length - 1].push(s); wNow += d; });
+  const widths = rows.map(r => r.reduce((a, s) => a + 2 * reachOf(s.id) + GAP, 0)), W = Math.max(...widths);
+  let y = 60;
+  rows.forEach((row, ri) => {
+    const h = Math.max(...row.map(s => 2 * reachOf(s.id))) + GAP;
+    let x = (W - widths[ri]) / 2;
+    row.forEach(s => {
+      const reach = reachOf(s.id), cx = x + GAP / 2 + reach, cy = y + h / 2;
+      suns[s.id] = { x: cx, y: cy, r: 74, title: s.title, planets: bySys[s.id], reach };
+      rings[s.id].forEach(({ p, r, a }) => { pos[p.id] = { x: cx + r * Math.cos(a), y: cy + r * Math.sin(a), sys: s.id }; });
+      x += 2 * reach + GAP;
+    });
+    y += h;
+  });
+  return { pos, suns, w: W, h: y + 20 };
+}
+
+function gRadius(p) { return Math.min(40, 17 + 6 * Math.sqrt(p.sessions)); }
+function gApply() {
+  G.world.setAttribute("transform", `translate(${G.cam.x},${G.cam.y}) scale(${G.cam.k})`); G.svg.style.setProperty("--k", G.cam.k);
+  G.svg.classList.toggle("far", G.cam.k < 0.62);
+  if (G.lastK === G.cam.k) return;
+  G.lastK = G.cam.k;
+  G.world.querySelectorAll(".gplanet .orb").forEach(o => { const s = Math.max(1, 10 / (+o.dataset.r * G.cam.k)); o.setAttribute("transform", s > 1 ? `scale(${s})` : ""); });
+}
+function gFit(box, pad = 40, animate = true, rightInset = 0) {
+  const W = G.wrap.clientWidth - rightInset, H = G.wrap.clientHeight;
+  if (W < 200 || H < 200) { G.pendingFit = [box, pad, rightInset]; G.cam = G.cam || { k: 0.3, x: 0, y: 0 }; return; }  // tab hidden (cmux workspace not shown): fit once it has a size
+  G.pendingFit = null;
+  const k = Math.min((W - pad * 2) / box.w, (H - pad * 2) / box.h, box.maxK || 2.2);
+  const to = { k, x: (W - box.w * k) / 2 - box.x * k, y: (H - box.h * k) / 2 - box.y * k };
+  if (!animate || !G.cam) { G.cam = to; return gApply(); }
+  const from = { ...G.cam }, t0 = performance.now();
+  (function step(t) {
+    const u = Math.min(1, (t - t0) / 380), e = 1 - Math.pow(1 - u, 3);
+    G.cam = { k: from.k + (to.k - from.k) * e, x: from.x + (to.x - from.x) * e, y: from.y + (to.y - from.y) * e };
+    gApply();
+    if (u < 1) requestAnimationFrame(step);
+  })(t0);
+}
+function gFitAll(animate) { const L = G.layout; gFit({ x: 0, y: 0, w: L.w, h: L.h }, 30, animate); }
+function gFitSystem(id, animate = true) { const s = G.suns[id]; if (!s) return; gFit({ x: s.x - s.reach, y: s.y - s.reach, w: s.reach * 2, h: s.reach * 2 }, 30, animate, G.planet ? G.panel.offsetWidth : 0); }
+
+function gPlanetEl(p) {
+  const at = G.pos[p.id], r = gRadius(p);
+  const g = svgEl("g", { class: "gplanet", "data-id": p.id, transform: `translate(${at.x},${at.y})` });
+  const orb = svgEl("g", { class: "orb", "data-r": r });  // scaled up when zoomed far out so it never shrinks below ~10px
+  orb.append(svgEl("circle", { class: "halo", r: r + 9 }), svgEl("circle", { class: "body", r }));
+  g.append(orb);
+  const label = svgEl("text", { class: "plabel", y: r + 16, "text-anchor": "middle" });
+  label.textContent = p.title.length > 30 ? p.title.slice(0, 29) + "…" : p.title;
+  g.append(label);
+  if (p.sessions > 1) { const n = svgEl("text", { class: "pcount", "text-anchor": "middle", dy: "0.35em" }); n.textContent = p.sessions; orb.append(n); }
+  g.onmouseenter = e => gHover(p.id, e);
+  g.onmousemove = e => gTipMove(e);
+  g.onmouseleave = () => gHover(null);
+  g.onclick = e => { e.stopPropagation(); if (!G.moved) gOpenPlanet(p.id); };
+  return g;
+}
+function gStatusPatch(p) {
+  const n = G.world && G.world.querySelector(`.gplanet[data-id="${p.id}"]`);
+  if (!n) return;
+  n.setAttribute("class", `gplanet st-${p.status}${p.needs ? " needs" : ""}${p.dormant ? " dormant" : ""}${p.tabs.length ? " live" : ""}`);
+}
+
+function gLinkPath(a, b) {
+  const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2, dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1;
+  const bend = Math.min(80, len * 0.15);
+  return `M${a.x},${a.y} Q${mx - (dy / len) * bend},${my + (dx / len) * bend} ${b.x},${b.y}`;
+}
+
+function gBuild() {
+  const L = G.layout = gLayout();
+  G.pos = L.pos; G.suns = L.suns;
+  const wrap = el("div", "galaxy"), svg = svgEl("svg", { class: "gsvg" }), world = svgEl("g", {});
+  const defs = svgEl("defs", {});
+  const marker = svgEl("marker", { id: "garrow", viewBox: "0 0 10 10", refX: "9", refY: "5", markerWidth: "7", markerHeight: "7", orient: "auto-start-reverse" });
+  marker.append(svgEl("path", { d: "M0,0 L10,5 L0,10 z", class: "garrowhead" }));
+  defs.append(marker); svg.append(defs, world);
+  // Suns and orbit rings
+  Object.entries(L.suns).forEach(([id, s]) => {
+    const g = svgEl("g", { class: "gsys", "data-sys": id });
+    const radii = [...new Set(s.planets.map(p => Math.round(Math.hypot(G.pos[p.id].x - s.x, G.pos[p.id].y - s.y))))];
+    radii.forEach(r => g.append(svgEl("circle", { class: "orbit", cx: s.x, cy: s.y, r })));
+    const sun = svgEl("circle", { class: "sun" + (id ? "" : " nogoal"), cx: s.x, cy: s.y, r: s.r });
+    const flare = svgEl("circle", { class: "flare", cx: s.x, cy: s.y, r: s.r + 14 });  // pulses while anything in this goal needs you
+    g.append(flare);
+    const t = svgEl("text", { class: "slabel", x: s.x, y: s.y - s.reach, dy: "-0.9em", "text-anchor": "middle" }); t.textContent = s.title;
+    const tt = svgEl("title", {}); tt.textContent = id ? "Click to zoom into this goal" : "Items the goal sorter hasn't placed yet. Use \"Sort into goals\" at the top left."; g.append(tt);
+    const c = svgEl("text", { class: "scount", x: s.x, y: s.y - s.reach, dy: "0.4em", "text-anchor": "middle" });
+    g.append(sun, t, c);
+    g.onclick = e => { e.stopPropagation(); if (!G.moved) gGoSystem(id); };
+    world.append(g);
+  });
+  // Links under planets
+  const lg = svgEl("g", { class: "glinks" });
+  const pairs = {};
+  G.data.links.forEach(l => {
+    if (!G.pos[l.a] || !G.pos[l.b] || !GLINES.includes(l.kind)) return;
+    const key = l.a + "|" + l.b;
+    (pairs[key] = pairs[key] || []).push(l);
+  });
+  Object.values(pairs).forEach(ls => {
+    ls.forEach((l, n) => {
+      const a = G.pos[l.a], b = G.pos[l.b];
+      const path = svgEl("path", { class: `glink k-${l.kind}${a.sys !== b.sys ? " cross" : ""}`, d: gLinkPath(a, b), "data-a": l.a, "data-b": l.b, "data-kind": l.kind });
+      if (l.kind === "spinoff") path.setAttribute("marker-end", "url(#garrow)");
+      if (n) path.setAttribute("transform", `translate(${n * 4},${n * 4})`);
+      lg.append(path);
+    });
+  });
+  world.append(lg, gHubs());
+  const pg = svgEl("g", {});
+  gVisible().forEach(p => pg.append(gPlanetEl(p)));
+  G.cityLayer = svgEl("g", { class: "gcities" });
+  world.append(pg, G.cityLayer);
+  // Pan (drag empty space), zoom (pinch / ctrl+wheel), two-finger scroll pans
+  svg.onmousedown = e => { G.drag = { x: e.clientX, y: e.clientY, cx: G.cam.x, cy: G.cam.y }; G.moved = false; };
+  svg.addEventListener("wheel", e => {
+    e.preventDefault();
+    if (e.ctrlKey || e.metaKey) {
+      const r = svg.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
+      const k = Math.max(0.12, Math.min(7, G.cam.k * Math.exp(-e.deltaY * 0.01)));
+      G.cam.x = mx - ((mx - G.cam.x) * k) / G.cam.k; G.cam.y = my - ((my - G.cam.y) * k) / G.cam.k; G.cam.k = k;
+    } else { G.cam.x -= e.deltaX; G.cam.y -= e.deltaY; }
+    gApply();
+  }, { passive: false });
+  let g0 = null;  // WebKit (cmux's browser) reports pinch as gesture events, not ctrl+wheel
+  svg.addEventListener("gesturestart", e => { e.preventDefault(); g0 = { k: G.cam.k, x: G.cam.x, y: G.cam.y, cx: e.clientX, cy: e.clientY }; });
+  svg.addEventListener("gesturechange", e => {
+    e.preventDefault(); if (!g0) return;
+    const r = svg.getBoundingClientRect(), mx = g0.cx - r.left, my = g0.cy - r.top, k = Math.max(0.12, Math.min(7, g0.k * e.scale));
+    G.cam = { k, x: mx - ((mx - g0.x) * k) / g0.k, y: my - ((my - g0.y) * k) / g0.k }; gApply();
+  });
+  svg.addEventListener("gestureend", e => { e.preventDefault(); g0 = null; });
+  svg.onclick = () => { if (G.moved) return; if (G.pinned) { G.pinned = null; gFocus(null); } };
+  G.tip = el("div", "gtip"); G.tip.hidden = true;
+  wrap.append(svg, gCrumbs(), gLegend(), G.tip);
+  G.wrap = wrap; G.svg = svg; G.world = world;
+}
+
+function gCrumbs() {
+  const c = el("div", "gcrumbs");
+  const add = (text, fn, cur) => { const b = el(cur ? "span" : "button", cur ? "cur" : "", text); if (fn) b.onclick = fn; if (c.childNodes.length) c.append(el("span", "sep", "›")); c.append(b); };
+  add("Galaxy", G.sys == null && !G.planet ? null : gGoGalaxy, G.sys == null && !G.planet);
+  if (G.sys != null) add(G.suns[G.sys] ? G.suns[G.sys].title : "", G.planet ? () => gGoSystem(G.sys) : null, !G.planet);
+  if (G.planet) { const p = G.data.planets.find(x => x.id === G.planet); add(p ? p.title : "", null, true); }
+  const loose = G.data.planets.filter(p => !G.suns[p.group] || p.group === "").length;
+  if (loose && G.suns[""]) {
+    const b = el("button", "gsort", G.sorting ? "Sorting…" : `Sort into goals (${loose} have none)`);
+    b.title = "One Sonnet call (about 2 cents) groups every open item by the goal it serves. It replaces the current goals, including ones you moved by hand.";
+    b.onclick = async () => { if (G.sorting) return; G.sorting = true; gRefreshCrumbs();
+      try { await workPost("groups"); } catch (e) { b.textContent = "Failed: " + e.message; }
+      G.sorting = false; G.sys = null; await galaxyFetch(true); G.cam = null; G.wrap = null; render(last); };
+    c.append(b);
+  }
+  const needs = gNeedsOrder();
+  if (needs.length) {
+    const b = el("button", "gnext", `Next that needs you (${needs.length})`);
+    b.title = "Fly to the next item waiting on you (key n)"; b.onclick = gNextNeeds;
+    c.append(b);
+  }
+  const fit = el("button", "gfit", "Fit"); fit.title = "Show the whole galaxy (key 0)"; fit.onclick = gGoGalaxy;
+  c.append(fit);
+  return c;
+}
+function gRefreshCrumbs() { const old = G.wrap.querySelector(".gcrumbs"); if (old) old.replaceWith(gCrumbs()); }
+
+function gLegend() {
+  const box = el("div", "glegend");
+  const counts = {};
+  G.data.links.forEach(l => (counts[l.kind] = (counts[l.kind] || 0) + 1));
+  const shapes = el("div", "gshapes");
+  shapes.innerHTML = `<svg width="300" height="22" viewBox="0 0 300 22"><circle cx="9" cy="11" r="8" class="sun"/><text x="22" y="15">goal</text>
+    <circle cx="66" cy="11" r="6" class="lg-planet"/><text x="77" y="15">work item</text><rect x="146" y="5" width="11" height="11" rx="2.5" class="lg-city"/><text x="162" y="15">session</text>
+    <polygon points="${gHex(225, 11, 7)}" class="lg-hub"/><text x="237" y="15">project</text></svg>`;
+  box.append(shapes, el("hr"));
+  [...GLINES, "project"].forEach(k => {
+    const lab = el("label", "k-" + k), cb = el("input");
+    cb.type = "checkbox"; cb.checked = G.kinds[k];
+    cb.onchange = () => { G.kinds[k] = cb.checked; remember("ow.gkinds2", JSON.stringify(G.kinds)); gFocus(G.pinned || G.planet); };
+    const text = k === "project" ? ` project roads (${G.hubCount} shared projects)` : ` ${GKINDS[k]} (${counts[k] || 0})`;
+    lab.append(cb, el("i", "swatch"), document.createTextNode(text));
+    box.append(lab);
+  });
+  const dorm = G.data.planets.filter(p => p.dormant).length;
+  const lab = el("label", ""), cb = el("input");
+  cb.type = "checkbox"; cb.checked = G.showDormant;
+  cb.onchange = () => { G.showDormant = cb.checked; remember("ow.gdormant", cb.checked ? "1" : "0"); G.wrap = null; render(last); };
+  lab.append(cb, document.createTextNode(` dormant items (${dorm}, no activity in ${G.data.dormant_days}+ days)`));
+  box.append(el("hr"), lab, el("div", "ghint", "pinch or ⌘-scroll to zoom · drag or scroll to pan · click a goal or item to zoom in · n next that needs you · Esc goes up · 0 fit · g leaves"));
+  return box;
+}
+
+// Hover or pin a planet: light it, its links (every kind, including hover-only ones) and its neighbours; dim the rest.
+function gFocus(id) {
+  const svg = G.svg;
+  svg.classList.toggle("focusing", !!id);
+  const near = new Set(id ? [id] : []);
+  svg.querySelectorAll(".glink").forEach(l => {
+    const touches = id && (l.dataset.a === id || l.dataset.b === id);
+    const shown = G.kinds[l.dataset.kind] || touches;
+    l.classList.toggle("hidden", !shown);
+    l.classList.toggle("on", !!touches);
+    if (touches) { near.add(l.dataset.a); near.add(l.dataset.b); }
+  });
+  const hubsOn = new Set();
+  svg.querySelectorAll(".groad").forEach(r => {
+    const touches = id && r.dataset.p === id;
+    r.classList.toggle("hidden", !(G.kinds.project || touches));
+    r.classList.toggle("on", !!touches);
+    if (touches) hubsOn.add(r.dataset.hub);
+  });
+  svg.querySelectorAll(".ghub").forEach(h => { h.classList.toggle("near", hubsOn.has(h.dataset.hub)); h.classList.toggle("hidden", !(G.kinds.project || hubsOn.has(h.dataset.hub))); });
+  svg.querySelectorAll(".gplanet").forEach(n => { n.classList.toggle("near", near.has(n.dataset.id)); n.classList.toggle("pin", n.dataset.id === id); });
+  svg.classList.toggle("incity", !!G.planet && !!G.detail);
+}
+function gHover(id, e) {
+  if (!id) { G.tip.hidden = true; return gFocus(G.pinned || G.planet); }
+  gFocus(id);
+  const p = G.data.planets.find(x => x.id === id), L = G.data.links.filter(l => l.a === id || l.b === id);
+  const kinds = {};
+  L.forEach(l => (kinds[l.kind] = (kinds[l.kind] || 0) + 1));
+  G.tip.replaceChildren(
+    el("b", "", p.title),
+    el("div", "muted", [p.needs ? "needs you" : LABEL[p.status] || (p.dormant ? "dormant" : "no live tab"), `active ${gAgo(p.last_active)}`,
+      `${p.sessions} session${p.sessions === 1 ? "" : "s"}`].join(" · ")),
+    ...(p.next ? [el("div", "", "Next: " + p.next)] : []),
+    ...(p.waits_on ? [el("div", "", "Waits on: " + p.waits_on)] : []),
+    ...(L.length ? [el("div", "muted", "Linked: " + Object.entries(kinds).map(([k, n]) => `${n} ${GKINDS[k]}`).join(", "))] : []));
+  G.tip.hidden = false; gTipMove(e);
+}
+function gTipMove(e) {
+  if (!e || G.tip.hidden) return;
+  const r = G.wrap.getBoundingClientRect();
+  G.tip.style.left = Math.min(e.clientX - r.left + 16, r.width - 340) + "px"; G.tip.style.top = (e.clientY - r.top + 16) + "px";
+}
+function gAgo(t) { return t ? ago(new Date(t * 1000).toISOString()) + (Date.now() / 1000 - t < 90 ? "" : " ago") : "never"; }
+
+function gGoGalaxy() { G.sys = null; gClosePlanet(true); gRefreshCrumbs(); gFitAll(true); }
+function gGoSystem(id) { G.sys = id; if (G.planet) gClosePlanet(true); gRefreshCrumbs(); gFitSystem(id); }
+async function gOpenPlanet(id) {
+  const p = G.data.planets.find(x => x.id === id);
+  if (!p) return;
+  G.planet = id; G.pinned = id; G.sys = G.pos[id].sys;
+  G.panel.hidden = false;
+  G.panel.replaceChildren(el("div", "tl-prompt", "loading…"));
+  G.detail = null; G.cityLayer.replaceChildren();
+  gRefreshCrumbs(); gFocus(id);
+  gFitPlanet(id, gRadius(p) + 120);
+  try { G.detail = await (await fetch("/api/planet?id=" + encodeURIComponent(id))).json(); }
+  catch (e) { G.panel.replaceChildren(el("div", "err", "Could not load this item: " + e.message)); return; }
+  if (G.planet !== id) return;
+  gRenderPlanet();
+  gDrawCities();
+  gFocus(id);
+}
+function gClosePlanet(quiet) {
+  G.planet = null; G.pinned = null; G.detail = null;
+  if (G.panel) G.panel.hidden = true;
+  if (G.cityLayer) G.cityLayer.replaceChildren();
+  if (G.svg) G.svg.classList.remove("incity");
+  if (!quiet && G.wrap) { gRefreshCrumbs(); gFocus(null); }
+}
+function gFitPlanet(id, reach) {
+  const at = G.pos[id];
+  gFit({ x: at.x - reach, y: at.y - reach, w: reach * 2, h: reach * 2, maxK: 5 }, 40, true, G.panel.hidden ? 0 : G.panel.offsetWidth);
+}
+
+// Zoomed into an item: its sessions are cities around it. Spokes tie each city to the item; purple roads join a session to the one spun off from it.
+function gDrawCities() {
+  const d = G.detail, at = G.pos[d.id], p = G.data.planets.find(x => x.id === d.id);
+  if (!d || !at || !p) return;
+  const S = d.sessions.filter(s => s.first || s.live), pr = gRadius(p), R = Math.max(pr + 70, pr + 22 * S.length);  // skip transcripts with no turns
+  const place = {};
+  S.forEach((s, i) => { const a = -Math.PI / 2 + (i / Math.max(1, S.length)) * 2 * Math.PI; place[s.transcript] = { x: at.x + R * Math.cos(a), y: at.y + R * Math.sin(a), a }; });
+  const layer = G.cityLayer;
+  layer.replaceChildren();
+  layer.append(svgEl("circle", { class: "cityring", cx: at.x, cy: at.y, r: R }));
+  S.forEach(s => { const c = place[s.transcript]; layer.append(svgEl("line", { class: "spoke", x1: at.x, y1: at.y, x2: c.x, y2: c.y })); });
+  S.forEach(s => {
+    if (!s.parent || !place[s.parent]) return;
+    const a = place[s.parent], b = place[s.transcript];
+    layer.append(svgEl("path", { class: "cityroad", d: gLinkPath(a, b), "marker-end": "url(#garrow)" }));
+  });
+  S.forEach((s, i) => {
+    const c = place[s.transcript], z = 15;
+    const g = svgEl("g", { class: `gcity st-${s.status}${s.live ? " live" : ""}`, transform: `translate(${c.x},${c.y})` });
+    g.append(svgEl("rect", { class: "halo", x: -z / 2 - 6, y: -z / 2 - 6, width: z + 12, height: z + 12, rx: 6 }), svgEl("rect", { class: "body", x: -z / 2, y: -z / 2, width: z, height: z, rx: 3.5 }));
+    const below = Math.sin(c.a) > -0.3;
+    const t = svgEl("text", { class: "clabel", "text-anchor": Math.abs(Math.cos(c.a)) < 0.3 ? "middle" : Math.cos(c.a) > 0 ? "start" : "end",
+      x: Math.abs(Math.cos(c.a)) < 0.3 ? 0 : Math.cos(c.a) > 0 ? z : -z, y: below ? z + 8 : -z });
+    t.textContent = s.title.length > 26 ? s.title.slice(0, 25) + "…" : s.title;
+    const tt = svgEl("title", {});
+    tt.textContent = `${s.title}\n${s.where || ""} · ${s.live ? LABEL[s.status] || s.status : "closed"}\n${new Date(s.first * 1000).toLocaleString()} → ${new Date(s.last * 1000).toLocaleString()}${s.subagents ? `\n${s.subagents} sub-agents` : ""}${s.brief ? `\nstarted from brief ${s.brief}` : ""}${s.live ? "\nclick to open its tab" : "\nclosed: use Resume in the panel"}`;
+    g.append(tt, t);
+    if (s.live) g.onclick = e => { e.stopPropagation(); if (!G.moved) gFocusTab(s); };
+    else g.onclick = e => e.stopPropagation();
+    layer.append(g);
+  });
+  gFitPlanet(d.id, R + 90);
+}
+
+function gHex(x, y, r) { return [0, 1, 2, 3, 4, 5].map(i => { const a = Math.PI / 6 + (i * Math.PI) / 3; return `${(x + r * Math.cos(a)).toFixed(1)},${(y + r * Math.sin(a)).toFixed(1)}`; }).join(" "); }
+
+// Shared project folders as hubs: placed among the items that use them, with a road to each. Replaces a tangle of item-to-item lines.
+function gHubs() {
+  const layer = svgEl("g", { class: "ghubs" }), users = {};
+  gVisible().forEach(p => (p.repos || []).forEach(r => (users[r] = users[r] || []).push(p.id)));
+  const hubs = Object.entries(users).filter(([, ids]) => ids.length >= 2 && ids.length <= HUB_MAX).map(([path, ids]) => {
+    const xs = ids.map(i => G.pos[i]);
+    return { path, ids, x: xs.reduce((a, b) => a + b.x, 0) / xs.length, y: xs.reduce((a, b) => a + b.y, 0) / xs.length };
+  });
+  const blockers = [...Object.values(G.pos).map(q => ({ x: q.x, y: q.y, r: 62 })), ...Object.values(G.suns).map(s => ({ x: s.x, y: s.y, r: s.r + 50 }))];
+  for (let pass = 0; pass < 40; pass++) {  // nudge hubs off planets, suns and each other
+    hubs.forEach(h => {
+      [...blockers, ...hubs.filter(o => o !== h).map(o => ({ x: o.x, y: o.y, r: 46 }))].forEach(b => {
+        const dx = h.x - b.x, dy = h.y - b.y, dist = Math.hypot(dx, dy) || 0.01;
+        if (dist < b.r) { const push = (b.r - dist) * 0.5; h.x += (dx / dist) * push + (dist < 0.1 ? 3 : 0); h.y += (dy / dist) * push; }
+      });
+    });
+  }
+  G.hubCount = hubs.length;
+  const roads = svgEl("g", {}), nodes = svgEl("g", {});
+  hubs.forEach((h, n) => {
+    const key = "h" + n;
+    h.ids.forEach(i => roads.append(svgEl("path", { class: "groad", "data-p": i, "data-hub": key, d: gLinkPath(h, G.pos[i]) })));
+    const g = svgEl("g", { class: "ghub", "data-hub": key, transform: `translate(${h.x},${h.y})` });
+    g.append(svgEl("polygon", { points: gHex(0, 0, 13) }));
+    const t = svgEl("text", { class: "hlabel", "text-anchor": "middle", y: 28 }); t.textContent = h.path.split("/").pop(); g.append(t);
+    const tt = svgEl("title", {}); tt.textContent = `${h.path.replace(/^\/Users\/[^/]+/, "~")}\nused by ${h.ids.length} items`; g.append(tt);
+    g.onmouseenter = () => { G.svg.querySelectorAll(`.groad[data-hub="${key}"]`).forEach(r => r.classList.add("on")); G.svg.classList.add("hubfocus"); h.ids.forEach(i => { const n2 = G.svg.querySelector(`.gplanet[data-id="${i}"]`); if (n2) n2.classList.add("near"); }); g.classList.add("near"); };
+    g.onmouseleave = () => { G.svg.classList.remove("hubfocus"); gFocus(G.pinned || G.planet); };
+    nodes.append(g);
+  });
+  layer.append(roads, nodes);
+  return layer;
+}
+
+// Needs-you items in reading order: goal by goal, then around each goal's rings.
+function gNeedsOrder() {
+  if (!G.data || !G.suns) return [];
+  const order = Object.keys(G.suns);
+  return G.data.planets.filter(p => p.needs && G.pos[p.id])
+    .sort((a, b) => order.indexOf(G.pos[a.id].sys) - order.indexOf(G.pos[b.id].sys) || G.pos[a.id].y - G.pos[b.id].y || G.pos[a.id].x - G.pos[b.id].x);
+}
+function gNextNeeds() {
+  const list = gNeedsOrder();
+  if (!list.length) return;
+  const at = list.findIndex(p => p.id === G.planet);
+  gOpenPlanet(list[(at + 1) % list.length].id);
+}
+
+// Goals pulse while anything inside needs you; the count under the sun stays current.
+function gSunPatch() {
+  if (!G.wrap) return;
+  Object.entries(G.suns).forEach(([id, s]) => {
+    const ps = G.data.planets.filter(p => G.pos[p.id] && G.pos[p.id].sys === id);
+    const need = ps.filter(p => p.needs).length, dorm = ps.filter(p => p.dormant).length;
+    const g = G.world.querySelector(`.gsys[data-sys="${CSS.escape(id)}"]`);
+    if (!g) return;
+    g.classList.toggle("alert", need > 0);
+    g.querySelector(".scount").textContent = `${ps.length - dorm} active${need ? ` · ${need} need${need === 1 ? "s" : ""} you` : ""}`;
+  });
+}
+
+function gFocusTab(s) { fetch("/api/focus", { method: "POST", body: JSON.stringify({ workspace: s.workspace, surface: s.live }) }); }
+
+function gRenderPlanet() {
+  const d = G.detail, p = G.data.planets.find(x => x.id === d.id) || {};
+  const head = el("div", "gp-head");
+  const close = el("button", "add", "×"); close.title = "Close (Esc)"; close.onclick = () => { gClosePlanet(); gFitSystem(G.sys); };
+  const h = el("h2", "", d.title);
+  head.append(h, close);
+  const meta = el("div", "gp-meta");
+  const st = p.needs ? "needs you" : p.dormant ? "dormant" : LABEL[p.status] || "no live tab";
+  meta.append(el("span", "chip st-" + (p.needs ? "waiting" : p.status), st), el("span", "muted", ` active ${gAgo(p.last_active)} · ${d.sessions.filter(s => s.first).length} sessions`));
+  const acts = el("div", "gp-acts");
+  const live = d.sessions.filter(s => s.live);
+  if (live.length) { const b = el("button", "add", "Open tab"); b.onclick = () => gFocusTab(live.find(s => s.status === "waiting") || live[live.length - 1]); acts.append(b); }
+  else if (d.state !== "done") { const b = el("button", "add", "Resume"); b.onclick = async () => { b.disabled = true; b.textContent = "Resuming…";
+    try { await workPost("resume", { id: d.id }); b.textContent = "Opened"; tick(); } catch (e) { b.textContent = "Failed: " + e.message; } }; acts.append(b); }
+  if (live.length && d.state === "active") { const b = el("button", "add", "Park"); b.title = "Write a note, close its tabs"; b.onclick = async () => { b.disabled = true; b.textContent = "Parking…";
+    try { const r = await workPost("park", { id: d.id }); b.textContent = "Parked. Next: " + r.next; tick(); } catch (e) { b.textContent = "Failed: " + e.message; } }; acts.append(b); }
+  const body = [head, meta];
+  if (d.goal) body.push(el("p", "gp-goal", d.goal));
+  const nx = p.next || d.next;
+  if (nx) body.push(el("p", "", "Next: " + nx));
+  if (d.waits_on) body.push(el("p", "", "Waits on: " + d.waits_on));
+  if (d.note) body.push(el("p", "muted", d.note));
+  if (acts.childNodes.length) body.push(acts);
+  body.push(el("h3", "", "History"), gHistory(d));
+  // Linked items, grouped per other item
+  const links = {};
+  G.data.links.filter(l => l.a === d.id || l.b === d.id).forEach(l => {
+    const other = l.a === d.id ? l.b : l.a;
+    (links[other] = links[other] || []).push(l);
+  });
+  const ids = Object.keys(links).sort((a, b) => gStrength(links[b]) - gStrength(links[a]));
+  if (ids.length) {
+    body.push(el("h3", "", `Linked items (${ids.length})`));
+    const ul = el("div", "gp-links");
+    ids.forEach(o => {
+      const op = G.data.planets.find(x => x.id === o);
+      if (!op) return;
+      const row = el("button", "gp-link");
+      row.append(el("span", "", op.title + (op.dormant ? " (dormant)" : "")));
+      links[o].forEach(l => row.append(el("span", "chip k-" + l.kind, GKINDS[l.kind] + ": " + l.via.map(gVia).slice(0, 2).join(", ") + (l.via.length > 2 ? ` +${l.via.length - 2}` : ""))));
+      row.onmouseenter = () => gFocus(o); row.onmouseleave = () => gFocus(d.id);
+      row.onclick = () => { if (!G.pos[o]) { G.showDormant = true; G.wrap = null; render(last); } gOpenPlanet(o); };
+      ul.append(row);
+    });
+    body.push(ul);
+  }
+  const listOf = (title, rows, link) => {
+    if (!rows.length) return;
+    body.push(el("h3", "", `${title} (${rows.length})`));
+    const ul = el("ul", "gp-list");
+    rows.forEach(r => { const li = el("li"); const a = el(link ? "a" : "span", "", link ? link(r)[0] : r); if (link) { a.href = link(r)[1]; a.target = "_blank"; } a.title = r; li.append(a); ul.append(li); });
+    body.push(ul);
+  };
+  listOf("Projects", d.repos.map(r => r.replace(/^\/Users\/[^/]+/, "~")));
+  listOf("Pull requests", d.prs, r => [r.replace("https://github.com/", ""), r]);
+  listOf("Slack threads", d.threads, k => { const [, ch, ts] = k.split(":"); return [`#${ch} · ${new Date(+ts * 1000).toLocaleDateString()}`, `https://${SLACK_DOMAIN}.slack.com/archives/${ch}/p${ts.replace(".", "")}`]; });
+  if (d.files.length) {
+    const det = el("details");
+    det.append(el("summary", "", `Files edited (${d.files.length})`));
+    const ul = el("ul", "gp-list");
+    d.files.forEach(f => ul.append(el("li", "", f.replace(/^\/Users\/[^/]+/, "~"))));
+    det.append(ul); body.push(det);
+  }
+  if (d.people.length) body.push(el("p", "muted", "People: " + d.people.join(", ")));
+  G.panel.replaceChildren(...body);
+}
+function gStrength(ls) { const w = { spinoff: 5, thread: 4, file: 3, project: 1, person: 1 }; return ls.reduce((s, l) => s + w[l.kind] * l.via.length, 0); }
+function gVia(v) { return v.startsWith("slack:") ? "#" + v.split(":")[1] : v.includes("/") ? v.split("/").pop() : v; }
+
+// One row per session on a shared time axis: bar = first to last turn, ticks = your prompts, curve = spun off from (via a /spinoff brief).
+function gHistory(d) {
+  const S = d.sessions.filter(s => s.first && s.last);  // a transcript with no turns yet has no span
+  if (!S.length) return el("div", "muted", "No transcripts on disk for this item.");
+  const now = Date.now() / 1000, t0 = Math.min(...S.map(s => s.first)), t1 = Math.max(...S.map(s => (s.live ? now : s.last)));
+  const W = Math.max(420, G.panel.clientWidth - 40), LBL = 170, PAD = 14, ROW = 30, H = S.length * ROW + 30;
+  const x = t => LBL + PAD + ((t - t0) / Math.max(1, t1 - t0)) * (W - LBL - PAD * 2);
+  const svg = svgEl("svg", { class: "ghist", width: W, height: H, viewBox: `0 0 ${W} ${H}` });
+  // Day ticks
+  const days = (t1 - t0) / 86400, step = days > 40 ? 7 : days > 10 ? 2 : 1;
+  const d0 = new Date(t0 * 1000); d0.setHours(0, 0, 0, 0);
+  for (let t = d0.getTime() / 1000 + 86400; t < t1; t += 86400 * step) {
+    svg.append(svgEl("line", { class: "gday", x1: x(t), x2: x(t), y1: 0, y2: H - 18 }));
+    const tx = svgEl("text", { class: "gdaylabel", x: x(t), y: H - 4, "text-anchor": "middle" });
+    tx.textContent = new Date(t * 1000).toLocaleDateString([], { month: "short", day: "numeric" }); svg.append(tx);
+  }
+  const rowOf = Object.fromEntries(S.map((s, i) => [s.transcript, i]));
+  S.forEach((s, i) => {
+    const y = i * ROW + 14, g = svgEl("g", { class: "grow" + (s.live ? " live st-" + s.status : "") });
+    const label = svgEl("text", { class: "grlabel", x: 4, y: y + 4 });
+    label.textContent = (s.title.length > 22 ? s.title.slice(0, 21) + "…" : s.title);
+    const tt = svgEl("title", {}); tt.textContent = `${s.title}\n${s.where || ""} · ${s.live ? LABEL[s.status] || s.status : "closed"}\n${new Date(s.first * 1000).toLocaleString()} → ${new Date(s.last * 1000).toLocaleString()}${s.subagents ? `\n${s.subagents} sub-agents` : ""}${s.brief ? `\nstarted from brief ${s.brief}` : ""}${s.live ? "\nclick to open its tab" : ""}`;
+    g.append(tt, label);
+    const xa = x(s.first), xb = Math.max(xa + 3, x(s.live ? now : s.last));
+    g.append(svgEl("rect", { class: "grbar", x: xa, y: y - 5, width: xb - xa, height: 10, rx: 5 }));
+    s.prompts.forEach(t => g.append(svgEl("line", { class: "grtick", x1: x(t), x2: x(t), y1: y - 7, y2: y + 7 })));
+    if (s.subagents) { const a = svgEl("text", { class: "grsub", x: xb + 6, y: y + 4 }); a.textContent = `+${s.subagents} agents`; g.append(a); }
+    if (s.live) g.onclick = () => gFocusTab(s);
+    svg.append(g);
+    if (s.parent && s.parent in rowOf) {
+      const py = rowOf[s.parent] * ROW + 14, px = xa;
+      svg.append(svgEl("path", { class: "grspin", d: `M${px},${py + 6} C${px},${(py + y) / 2} ${px},${(py + y) / 2} ${px + 2},${y - 6}`, "marker-end": "url(#garrow)" }));
+    }
+  });
+  const wrap = el("div", "ghistwrap");
+  wrap.append(svg, el("div", "ghint", "bar = first to last turn · ticks = your prompts · purple curve = spun off with a brief · click a live row to open it"));
+  return wrap;
+}
+
+// Arriving from a tab: open the item that tab belongs to.
+function gCameFrom(surface) {
+  if (!G.data || !G.wrap) return setTimeout(() => gCameFrom(surface), 800);
+  const p = G.data.planets.find(x => x.tabs.includes(surface));
+  if (p && G.pos[p.id]) gOpenPlanet(p.id);
+}
+function renderGalaxy(state) {
+  galaxyFetch(false);
+  if (!G.data) { map.replaceChildren(el("div", "tl-prompt", "Mapping the galaxy…")); return; }
+  const live = Object.fromEntries((state.work ? state.work.items : []).map(i => [i.id, i]));
+  G.data.planets.forEach(p => { const v = live[p.id]; if (v) Object.assign(p, { status: v.status, needs: v.needs, next: v.next, tabs: v.tabs }); });
+  tally.replaceChildren(...[["needs you", G.data.planets.filter(p => p.needs).length], ["active", G.data.planets.filter(p => !p.dormant).length], ["dormant", G.data.planets.filter(p => p.dormant).length]]
+    .map(([k, n]) => { const s = el("span"); s.append(el("b", "", String(n)), document.createTextNode(" " + k)); return s; }));
+  if (!G.wrap || !map.contains(G.wrap)) {
+    if (!G.wrap) gBuild();
+    map.replaceChildren(G.wrap);
+    map.classList.add("gmode");
+    document.documentElement.style.setProperty("--hh", document.querySelector("header").offsetHeight + "px");
+    if (!G.cam) { if (G.sys != null && G.suns[G.sys]) gFitSystem(G.sys, false); else gFitAll(false); }
+    gApply();
+  }
+  if (G.pendingFit && G.wrap.clientWidth >= 200) document.documentElement.style.setProperty("--hh", document.querySelector("header").offsetHeight + "px");
+  if (G.pendingFit && G.wrap.clientWidth >= 200) gFit(G.pendingFit[0], G.pendingFit[1], false, G.pendingFit[2]);
+  G.data.planets.forEach(gStatusPatch);
+  gSunPatch();
+  gRefreshCrumbs();
+  if (G.planet && G.detail && !G.cityLayer.childNodes.length) gDrawCities();
+  gFocus(G.pinned || G.planet);
+}
+
+G.panel = document.createElement("aside");
+G.panel.id = "gplanet"; G.panel.hidden = true;
+document.body.append(G.panel);
+document.addEventListener("keydown", e => {
+  if (view !== "galaxy" || typing(e) || !ib.hidden || tlSession) return;
+  if (e.key === "Escape") { if (G.planet) { gClosePlanet(); if (G.sys != null) gFitSystem(G.sys); } else if (G.sys != null) gGoGalaxy(); }
+  else if (e.key === "n") gNextNeeds();
+  else if (e.key === "0") gGoGalaxy();
+  else if (e.key === "=" || e.key === "+" || e.key === "-") {
+    const k = Math.max(0.12, Math.min(7, G.cam.k * (e.key === "-" ? 0.8 : 1.25))), cx = G.wrap.clientWidth / 2, cy = G.wrap.clientHeight / 2;
+    G.cam.x = cx - ((cx - G.cam.x) * k) / G.cam.k; G.cam.y = cy - ((cy - G.cam.y) * k) / G.cam.k; G.cam.k = k; gApply();
+  }
+});
+window.addEventListener("mousemove", e => {
+  if (!G.drag) return;
+  const dx = e.clientX - G.drag.x, dy = e.clientY - G.drag.y;
+  if (Math.abs(dx) + Math.abs(dy) > 4) { G.moved = true; G.svg.classList.add("panning"); }
+  if (G.moved) { G.cam.x = G.drag.cx + dx; G.cam.y = G.drag.cy + dy; gApply(); }
+});
+window.addEventListener("mouseup", () => { if (!G.drag) return; G.drag = null; G.svg.classList.remove("panning"); setTimeout(() => (G.moved = false), 0); });
+window.addEventListener("resize", () => { if (view === "galaxy" && G.wrap) { if (G.pendingFit) gFit(G.pendingFit[0], G.pendingFit[1], false, G.pendingFit[2]); else gApply(); } });
+
 // ---------- Work view: work items are the unit; their tabs hang under them. The tab map is one key (w) away. ----------
 let view = "work";
-try { view = localStorage.getItem("ow.view") || "work"; } catch (e) { /* storage blocked: default view */ }
+// The galaxy is the default on every load; w (work/tabs) and g switch for this visit only.
+view = "galaxy";
 const viewBtn = document.getElementById("viewBtn");
-function setView(v) { view = v; remember("ow.view", v); viewBtn.textContent = v === "work" ? "Tabs view" : "Work view"; render(last); }
+let lastFlat = view === "galaxy" ? "work" : view;  // the view g returns to
+function setView(v) {
+  if (v !== "galaxy") lastFlat = v;
+  view = v; remember("ow.view", v);
+  viewBtn.textContent = v === "work" ? "Tabs view" : "Work view";
+  galaxyBtn.classList.toggle("on", v === "galaxy");
+  if (v !== "galaxy") { map.classList.remove("gmode"); G.panel.hidden = true; G.wrap = null; }
+  else if (G.planet) G.panel.hidden = false;
+  render(last);
+}
+const galaxyBtn = document.getElementById("galaxyBtn");
 viewBtn.onclick = () => setView(view === "work" ? "tabs" : "work");
+galaxyBtn.onclick = () => setView(view === "galaxy" ? lastFlat : "galaxy");
 viewBtn.textContent = view === "work" ? "Tabs view" : "Work view";
+galaxyBtn.classList.toggle("on", view === "galaxy");
+document.addEventListener("keydown", e => { if (e.key === "g" && !typing(e) && ib.hidden && !document.getElementById("peek")) setView(view === "galaxy" ? lastFlat : "galaxy"); });
 const clearPin = () => { const w = document.querySelector(".wmap"); if (mapPin && w) { mapPin = null; mapApply(w, w._chain); } };
 document.addEventListener("click", e => { if (!e.target.closest(".wmap")) clearPin(); });
 document.addEventListener("keydown", e => { if (e.key === "Escape") clearPin(); });
@@ -1591,6 +2321,7 @@ function render(state) {
     const fresh = state.regions.flatMap(r => r.sessions).find(x => x.id === tlSession.id);
     if (fresh) tlSession.status = fresh.status;
   }
+  if (view === "galaxy") return renderGalaxy(state);
   if (view === "work" && state.work) return renderWork(state);
   const parentOf = Object.fromEntries(state.edges.map(e => [e.child, e.parent]));
   const counts = { waiting: 0, done: 0, working: 0 };
@@ -1711,17 +2442,20 @@ function render(state) {
 }
 
 let seenCame = 0, scrollPin = false;
+let pageVersion = 0;
 async function tick() {
   try {
     const state = await (await fetch("/api/state")).json();
     last = state;
     const came = state.came_from;  // the tab you were in when you switched to the Overworld: light it and scroll to it
+    if (pageVersion && state.page && state.page !== pageVersion) return location.reload();  // index.html changed on disk: load the new page
+    pageVersion = pageVersion || state.page;
     if (came && came.at > seenCame) {
-      if (seenCame || Date.now() / 1000 - came.at < 60) { mapPin = "t:" + came.id; sel = came.id; scrollPin = true; }
+      if (seenCame || Date.now() / 1000 - came.at < 60) { mapPin = "t:" + came.id; sel = came.id; scrollPin = true; if (view === "galaxy") gCameFrom(came.id); }
       seenCame = came.at;
     }
     if (!dragging && !draggingRegion && !draggingItem && !editing) render(last);  // re-rendering mid-drag or mid-rename would drop it
-    if (scrollPin && view !== "work") { scrollPin = false; select(sel); }
+    if (scrollPin && view === "tabs") { scrollPin = false; select(sel); }
     renderInbox();  // no-op while the inbox is closed
   } catch (e) {
     map.replaceChildren(el("div", "err", "Overworld server not reachable: " + e.message));
