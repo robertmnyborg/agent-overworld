@@ -405,6 +405,9 @@
   .gsys.alert .flare { stroke: var(--waiting); animation: beacon 1.6s ease-out infinite; transform-box: fill-box; transform-origin: center; }
   .gsys.alert .sun { stroke: var(--waiting); }
   .gsys.alert .scount { fill: var(--waiting); font-weight: 600; }
+  .gdock { display: inline-flex; gap: 6px; align-items: center; margin-left: 8px; padding: 1px 4px 1px 8px; border: 1px solid var(--working); border-radius: 5px; color: var(--text); }
+  .gdock button { color: var(--working) !important; }
+  .gdockmsg { margin-left: 8px; color: var(--muted); }
   .gcrumbs .gnext { color: var(--bg); background: var(--waiting); border-radius: 5px; padding: 1px 8px; margin-left: 6px; font-weight: 600; }
   .ghub polygon { fill: #232637; stroke: #9aa0c0; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
   .ghub { cursor: default; }
@@ -433,6 +436,8 @@
   .gcity.st-waiting .body { fill: var(--waiting); }
   .gcity.st-waiting .halo { stroke: var(--waiting); animation: beacon 1.8s ease-out infinite; transform-box: fill-box; transform-origin: center; }
   .gcity.live:hover .body { stroke: var(--text); }
+  .gcity.reopen { cursor: pointer; }
+  .gcity.reopen:hover .body { stroke: var(--muted); stroke-dasharray: 2 2; }
   .clabel { fill: var(--text); font-size: calc(11.5px / var(--k, 1)); pointer-events: none; paint-order: stroke; stroke: var(--bg); stroke-width: calc(3px / var(--k, 1)); }
   .gshapes text { fill: var(--muted); font-size: 11px; }
   .gshapes .lg-planet { fill: #8a8ea3; }
@@ -465,6 +470,60 @@
   .ghint { color: var(--muted); font-size: 11px; margin-top: 4px; }
   .gtip { position: absolute; z-index: 3; max-width: 320px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; pointer-events: none; display: flex; flex-direction: column; gap: 3px; box-shadow: 0 6px 24px rgba(0,0,0,.4); }
   .gtip[hidden] { display: none; }
+  .gtip .gtiphit { color: var(--waiting); }
+  /* Legibility: labels only where they matter until you zoom in; dormant items are faint dots; other goals fade while you're inside one. */
+  .gsvg:not(.close):not(.insys) .gplanet:not(.needs):not(.st-working):not(.near):not(.pin):not(.hit) .plabel { display: none; }
+  .gplanet.dormant:not(.needs) { opacity: .3; }
+  .gplanet.dormant:not(.needs):not(.near):not(.pin) .plabel, .gplanet.dormant .pcount { display: none; }
+  .gsvg.insys .gplanet.away, .gsvg.insys .gsys.away, .gsvg.insys .glink.away { opacity: .07; }
+  .gsvg.insys .gplanet.away .plabel { display: none; }
+  .glegend:not(.open) > :not(.glhead) { display: none; }
+  .glegend .glhead { background: none; border: 0; color: var(--muted); font: inherit; cursor: pointer; padding: 0; text-align: left; }
+  .glegend .glhead::before { content: "▸ "; }
+  .glegend.open .glhead::before { content: "▾ "; }
+  .gmini { position: absolute; bottom: 14px; right: 16px; width: 190px; height: 130px; background: rgba(18,19,26,.88); border: 1px solid var(--line); border-radius: 8px; padding: 4px; cursor: crosshair; opacity: 0; pointer-events: none; transition: opacity .2s ease-out; z-index: 3; }
+  .gmini.on { opacity: 1; pointer-events: auto; }
+  .gmini svg { width: 100%; height: 100%; display: block; }
+  .gmini .msun { fill: rgba(245,165,36,.07); stroke: rgba(245,165,36,.35); stroke-width: 1; vector-effect: non-scaling-stroke; }
+  .gmini .mdot { fill: #6d7392; }
+  .gmini .mdot.working { fill: var(--working); }
+  .gmini .mdot.needs { fill: var(--waiting); }
+  .gmini .mview { fill: rgba(255,255,255,.08); stroke: var(--text); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+  /* Motion: focus and search fade instead of snapping; sessions and bubbles enter one after another; the item panel slides in. */
+  .gplanet, .glink, .groad, .ghub, .gsys, .glinks, .ghubs { transition: opacity .18s ease-out; }
+  .gcity, .cityroad, .cityring { animation: gIn .28s ease-out both; animation-delay: calc(var(--i, 0) * 28ms + 120ms); }
+  .spoke { stroke-dasharray: 1; animation: gGrow .32s ease-out both; animation-delay: calc(var(--i, 0) * 28ms); }
+  .gbubble { animation: gRise .22s ease-out both; animation-delay: calc(var(--i, 0) * 22ms); }
+  #gplanet:not([hidden]) { animation: gSlide .24s cubic-bezier(.2,.8,.2,1) both; }
+  @keyframes gIn { from { opacity: 0; } }
+  @keyframes gGrow { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+  @keyframes gRise { from { opacity: 0; translate: 0 6px; } }
+  @keyframes gSlide { from { transform: translateX(40px); opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) {
+    .gplanet, .glink, .groad, .ghub, .gsys, .glinks, .ghubs { transition: none; }
+    .gcity, .cityroad, .cityring, .spoke, .gbubble, #gplanet:not([hidden]) { animation: none; }
+  }
+  .gsearch { position: absolute; top: 54px; left: 16px; display: flex; gap: 8px; align-items: center; z-index: 2; }
+  .gsearch input { width: 260px; background: rgba(18,19,26,.9); border: 1px solid var(--line); border-radius: 8px; color: var(--text); font: inherit; padding: 6px 10px; outline: none; }
+  .gsearch input:focus { border-color: var(--working); }
+  .gscount { color: var(--muted); font-size: 12px; background: rgba(18,19,26,.75); border-radius: 5px; padding: 1px 6px; }
+  .gscount:empty { display: none; }
+  .gbubbles { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 1; }
+  .gcrumbs, .gsearch { z-index: 3; }
+  .gbubble.crowded { visibility: hidden; }
+  .gbubble .gbline { display: none; }
+  .gbubble:hover .gbline { display: block; }
+  .gbubble:hover { max-width: 300px; }
+  .gbubble { position: absolute; left: 0; top: 0; max-width: 200px; pointer-events: auto; cursor: pointer; background: var(--panel); border: 1px solid var(--waiting); border-radius: 8px; padding: 5px 8px; font-size: 12px; line-height: 1.35; box-shadow: 0 4px 16px rgba(0,0,0,.45); opacity: .93; }
+  .gbubble::after { content: ""; position: absolute; left: 50%; bottom: -6px; width: 10px; height: 10px; background: var(--panel); border-right: 1px solid var(--waiting); border-bottom: 1px solid var(--waiting); transform: translateX(-50%) rotate(45deg); }
+  .gbubble:hover { z-index: 2; opacity: 1; }
+  .gbubble b { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .gbubble .gbfield { color: var(--muted); }
+  .gbubble .gbsnip { color: var(--text); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .gbubble mark { background: rgba(245,165,36,.3); color: var(--text); border-radius: 2px; }
+  .gsvg.searching .gplanet:not(.hit):not(.near) { opacity: .12; }
+  .gsvg.searching .gplanet.hit .halo { stroke: var(--waiting); }
+  .gsvg.searching .glink:not(.on), .gsvg.searching .groad:not(.on), .gsvg.searching .ghub:not(.near) { opacity: .08; }
   .muted { color: var(--muted); }
   #gplanet { position: fixed; top: 0; right: 0; bottom: 0; width: min(640px, 48vw); background: var(--panel); border-left: 1px solid var(--line); overflow-y: auto; padding: 14px 18px 40px; z-index: 5; box-shadow: -8px 0 30px rgba(0,0,0,.35); }
   #gplanet[hidden] { display: none; }
@@ -1270,12 +1329,12 @@ setInterval(loadTimeline, 3000);
 // Galaxy (all goals) -> system (one goal, click its sun) -> planet (one item: its sessions as a family tree over time, in the side panel).
 const GKINDS = { spinoff: "spinoff", thread: "same Slack thread", file: "same files", project: "same project", person: "same person" };
 const GLINES = ["spinoff", "thread", "file", "person"];  // drawn as lines; projects are drawn as hubs with roads instead
-const GDEFAULT = { spinoff: true, thread: true, file: true, project: true, person: false };  // person links show on hover only, or they'd be a tangle
+const GDEFAULT = { spinoff: true, thread: true, file: true, project: false, person: false };  // project roads and person links show on hover or open only, or they'd be a tangle
 const HUB_MAX = 12;  // a project folder used by more items than this is too generic to be a hub
 const SLACK_DOMAIN = "piiqdev";
 const G = { data: null, sig: "", fetching: false, fetchedAt: 0, cam: null, sys: null, planet: null, pinned: null,
   kinds: { ...GDEFAULT }, showDormant: true, pos: {}, suns: {}, wrap: null, svg: null, world: null, tip: null, panel: null, detail: null };
-try { Object.assign(G.kinds, JSON.parse(localStorage.getItem("ow.gkinds2") || "{}")); G.showDormant = localStorage.getItem("ow.gdormant") !== "0"; } catch (e) {}
+try { Object.assign(G.kinds, JSON.parse(localStorage.getItem("ow.gkinds3") || "{}")); G.showDormant = localStorage.getItem("ow.gdormant") !== "0"; } catch (e) {}
 
 async function galaxyFetch(force) {
   if (G.fetching || (!force && Date.now() - G.fetchedAt < 30000)) return;
@@ -1342,13 +1401,59 @@ function gLayout() {
   return { pos, suns, w: W, h: y + 20 };
 }
 
-function gRadius(p) { return Math.min(40, 17 + 6 * Math.sqrt(p.sessions)); }
+function gRadius(p) { return p.dormant && !p.needs ? 8 : Math.min(40, 17 + 6 * Math.sqrt(p.sessions)); }
 function gApply() {
   G.world.setAttribute("transform", `translate(${G.cam.x},${G.cam.y}) scale(${G.cam.k})`); G.svg.style.setProperty("--k", G.cam.k);
   G.svg.classList.toggle("far", G.cam.k < 0.62);
+  G.svg.classList.toggle("close", G.cam.k >= 1.1);
+  gBubblesPlace();
+  gMiniPlace();
   if (G.lastK === G.cam.k) return;
   G.lastK = G.cam.k;
   G.world.querySelectorAll(".gplanet .orb").forEach(o => { const s = Math.max(1, 10 / (+o.dataset.r * G.cam.k)); o.setAttribute("transform", s > 1 ? `scale(${s})` : ""); });
+}
+// Camera motion. Each motion takes a number from G.anim; starting another (or grabbing the map) bumps it, which stops the old one.
+const RM = matchMedia("(prefers-reduced-motion: reduce)");
+function gStop() { G.anim = (G.anim || 0) + 1; G.zoomT = null; }
+function gZoomTo(k, mx, my) {
+  const k0 = G.cam.k;
+  G.cam.x = mx - ((mx - G.cam.x) * k) / k0; G.cam.y = my - ((my - G.cam.y) * k) / k0; G.cam.k = k;
+}
+// Zoom eases toward its target, so a mouse-wheel notch glides instead of jumping. Trackpad pinches send small steps and feel the same as before.
+function gZoomBy(f, mx, my) {
+  const clamp = k => Math.max(0.12, Math.min(7, k));
+  if (RM.matches) { gStop(); gZoomTo(clamp(G.cam.k * f), mx, my); return gApply(); }
+  if (!G.zoomT) {
+    gStop();
+    G.zoomT = { k: G.cam.k };
+    const id = G.anim;
+    let last = performance.now();
+    requestAnimationFrame(function step(t) {
+      const z = G.zoomT;
+      if (G.anim !== id || !z) return;
+      const a = 1 - Math.exp(-(t - last) / 55);
+      last = t;
+      let k = G.cam.k + (z.k - G.cam.k) * a;
+      if (Math.abs(z.k - k) / z.k < 0.002) k = z.k;
+      gZoomTo(k, z.mx, z.my); gApply();
+      if (k !== z.k) requestAnimationFrame(step); else G.zoomT = null;
+    });
+  }
+  Object.assign(G.zoomT, { k: clamp(G.zoomT.k * f), mx, my });
+}
+// Let go of a drag mid-swipe and the map keeps gliding, slowing to a stop.
+function gGlide(vx, vy) {
+  if (RM.matches || Math.hypot(vx, vy) < 0.25) return;
+  gStop();
+  const id = G.anim;
+  let last = performance.now();
+  requestAnimationFrame(function step(t) {
+    if (G.anim !== id) return;
+    const dt = Math.min(40, t - last); last = t;
+    G.cam.x += vx * dt; G.cam.y += vy * dt; gApply();
+    const decay = Math.exp(-dt / 230); vx *= decay; vy *= decay;
+    if (Math.hypot(vx, vy) > 0.02) requestAnimationFrame(step);
+  });
 }
 function gFit(box, pad = 40, animate = true, rightInset = 0) {
   const W = G.wrap.clientWidth - rightInset, H = G.wrap.clientHeight;
@@ -1356,10 +1461,16 @@ function gFit(box, pad = 40, animate = true, rightInset = 0) {
   G.pendingFit = null;
   const k = Math.min((W - pad * 2) / box.w, (H - pad * 2) / box.h, box.maxK || 2.2);
   const to = { k, x: (W - box.w * k) / 2 - box.x * k, y: (H - box.h * k) / 2 - box.y * k };
-  if (!animate || !G.cam) { G.cam = to; return gApply(); }
-  const from = { ...G.cam }, t0 = performance.now();
+  if (!animate || !G.cam || RM.matches) { gStop(); G.cam = to; return gApply(); }
+  gTween(to);
+}
+function gTween(to) {
+  if (RM.matches) { gStop(); G.cam = to; return gApply(); }
+  gStop();
+  const from = { ...G.cam }, t0 = performance.now(), id = G.anim;
   (function step(t) {
-    const u = Math.min(1, (t - t0) / 380), e = 1 - Math.pow(1 - u, 3);
+    if (G.anim !== id) return;  // a drag, zoom or newer flight took over
+    const u = Math.min(1, (t - t0) / 480), e = 1 + 1.8 * Math.pow(u - 1, 3) + 0.8 * Math.pow(u - 1, 2);  // ease out with a small overshoot that settles
     G.cam = { k: from.k + (to.k - from.k) * e, x: from.x + (to.x - from.x) * e, y: from.y + (to.y - from.y) * e };
     gApply();
     if (u < 1) requestAnimationFrame(step);
@@ -1387,7 +1498,7 @@ function gPlanetEl(p) {
 function gStatusPatch(p) {
   const n = G.world && G.world.querySelector(`.gplanet[data-id="${p.id}"]`);
   if (!n) return;
-  n.setAttribute("class", `gplanet st-${p.status}${p.needs ? " needs" : ""}${p.dormant ? " dormant" : ""}${p.tabs.length ? " live" : ""}`);
+  n.setAttribute("class", `gplanet st-${p.status}${p.needs ? " needs" : ""}${p.dormant ? " dormant" : ""}${p.tabs.length ? " live" : ""}${G.hitIds && G.hitIds.has(p.id) ? " hit" : ""}${G.sys != null && G.pos[p.id] && G.pos[p.id].sys !== G.sys ? " away" : ""}`);
 }
 
 function gLinkPath(a, b) {
@@ -1442,18 +1553,18 @@ function gBuild() {
   G.cityLayer = svgEl("g", { class: "gcities" });
   world.append(pg, G.cityLayer);
   // Pan (drag empty space), zoom (pinch / ctrl+wheel), two-finger scroll pans
-  svg.onmousedown = e => { G.drag = { x: e.clientX, y: e.clientY, cx: G.cam.x, cy: G.cam.y }; G.moved = false; };
+  svg.onmousedown = e => { gStop(); G.drag = { x: e.clientX, y: e.clientY, cx: G.cam.x, cy: G.cam.y, vx: 0, vy: 0, px: e.clientX, py: e.clientY, pt: performance.now() }; G.moved = false; };
   svg.addEventListener("wheel", e => {
     e.preventDefault();
     if (e.ctrlKey || e.metaKey) {
-      const r = svg.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
-      const k = Math.max(0.12, Math.min(7, G.cam.k * Math.exp(-e.deltaY * 0.01)));
-      G.cam.x = mx - ((mx - G.cam.x) * k) / G.cam.k; G.cam.y = my - ((my - G.cam.y) * k) / G.cam.k; G.cam.k = k;
-    } else { G.cam.x -= e.deltaX; G.cam.y -= e.deltaY; }
+      const r = svg.getBoundingClientRect();
+      return gZoomBy(Math.exp(-e.deltaY * 0.01), e.clientX - r.left, e.clientY - r.top);
+    }
+    gStop(); G.cam.x -= e.deltaX; G.cam.y -= e.deltaY;  // trackpad scrolling brings its own momentum
     gApply();
   }, { passive: false });
   let g0 = null;  // WebKit (cmux's browser) reports pinch as gesture events, not ctrl+wheel
-  svg.addEventListener("gesturestart", e => { e.preventDefault(); g0 = { k: G.cam.k, x: G.cam.x, y: G.cam.y, cx: e.clientX, cy: e.clientY }; });
+  svg.addEventListener("gesturestart", e => { e.preventDefault(); gStop(); g0 = { k: G.cam.k, x: G.cam.x, y: G.cam.y, cx: e.clientX, cy: e.clientY }; });
   svg.addEventListener("gesturechange", e => {
     e.preventDefault(); if (!g0) return;
     const r = svg.getBoundingClientRect(), mx = g0.cx - r.left, my = g0.cy - r.top, k = Math.max(0.12, Math.min(7, g0.k * e.scale));
@@ -1462,8 +1573,113 @@ function gBuild() {
   svg.addEventListener("gestureend", e => { e.preventDefault(); g0 = null; });
   svg.onclick = () => { if (G.moved) return; if (G.pinned) { G.pinned = null; gFocus(null); } };
   G.tip = el("div", "gtip"); G.tip.hidden = true;
-  wrap.append(svg, gCrumbs(), gLegend(), G.tip);
+  G.bubbles = el("div", "gbubbles");
+  wrap.append(svg, G.bubbles, gCrumbs(), gSearchBox(), gLegend(), gMinimap(), G.tip);
   G.wrap = wrap; G.svg = svg; G.world = world;
+  if (G.hits) gSearchPaint();  // a rebuild keeps the current search
+}
+
+// Minimap: once you zoom in past the whole galaxy, a small overview in the corner shows goals, items and the part you're looking at. Click or drag it to move there.
+function gMinimap() {
+  const L = G.layout, box = el("div", "gmini"), svg = svgEl("svg", { viewBox: `0 0 ${L.w} ${L.h}`, preserveAspectRatio: "xMidYMid meet" });
+  Object.values(L.suns).forEach(s => svg.append(svgEl("circle", { class: "msun", cx: s.x, cy: s.y, r: s.reach })));
+  gVisible().forEach(p => { const at = G.pos[p.id]; if (at) svg.append(svgEl("circle", { class: "mdot" + (p.needs ? " needs" : p.status === "working" ? " working" : ""), cx: at.x, cy: at.y, r: p.dormant ? 10 : 18 })); });
+  G.miniView = svgEl("rect", { class: "mview" });
+  svg.append(G.miniView);
+  box.append(svg);
+  const toWorld = e => { const r = svg.getBoundingClientRect(), s = Math.min(r.width / L.w, r.height / L.h);
+    return { x: (e.clientX - r.left - (r.width - L.w * s) / 2) / s, y: (e.clientY - r.top - (r.height - L.h * s) / 2) / s }; };
+  const center = (pt, animate) => { const W = G.wrap.clientWidth - (G.panel.hidden ? 0 : G.panel.offsetWidth), H = G.wrap.clientHeight;
+    const to = { k: G.cam.k, x: W / 2 - pt.x * G.cam.k, y: H / 2 - pt.y * G.cam.k };
+    if (animate) gTween(to); else { gStop(); G.cam = to; gApply(); } };
+  box.onmousedown = e => { e.stopPropagation(); e.preventDefault(); center(toWorld(e), true);
+    const move = ev => center(toWorld(ev), false), up = () => { window.removeEventListener("mousemove", move); window.removeEventListener("mouseup", up); };
+    window.addEventListener("mousemove", move); window.addEventListener("mouseup", up); };
+  box.onclick = e => e.stopPropagation();
+  G.mini = box;
+  return box;
+}
+function gMiniPlace() {
+  if (!G.mini || !G.layout) return;
+  const L = G.layout, W = G.wrap.clientWidth - (G.panel.hidden ? 0 : G.panel.offsetWidth), H = G.wrap.clientHeight, k = G.cam.k;
+  const v = { x: -G.cam.x / k, y: -G.cam.y / k, w: W / k, h: H / k };
+  const all = v.x <= 0 && v.y <= 0 && v.x + v.w >= L.w && v.y + v.h >= L.h;  // whole galaxy in view: no need for the overview
+  G.mini.classList.toggle("on", !all && W >= 200);
+  G.mini.style.right = (G.panel.hidden ? 16 : G.panel.offsetWidth + 16) + "px";
+  const x = Math.max(0, v.x), y = Math.max(0, v.y);
+  Object.entries({ x, y, width: Math.max(0, Math.min(L.w, v.x + v.w) - x), height: Math.max(0, Math.min(L.h, v.y + v.h) - y) })
+    .forEach(([a, n]) => G.miniView.setAttribute(a, n));
+}
+
+// Search: every item whose name, notes, projects, files or prompts hold all the words lights up, with a bubble showing where it matched.
+function gSearchBox() {
+  const box = el("div", "gsearch"), input = el("input");
+  input.type = "search"; input.placeholder = "Search sessions (/)"; input.value = G.q || "";
+  input.oninput = () => { clearTimeout(G.searchT); G.searchT = setTimeout(() => gSearch(input.value), 180); };
+  input.onkeydown = e => {
+    e.stopPropagation();
+    if (e.key === "Escape") { if (input.value) { input.value = ""; gSearch(""); } else input.blur(); }
+    else if (e.key === "Enter") { clearTimeout(G.searchT); if (input.value !== G.q) gSearch(input.value).then(() => gSearchStep(e.shiftKey ? -1 : 1)); else gSearchStep(e.shiftKey ? -1 : 1); }
+  };
+  G.searchCount = el("span", "gscount");
+  box.append(input, G.searchCount);
+  G.searchInput = input;
+  return box;
+}
+async function gSearch(q) {
+  G.q = q;
+  if (!q.trim()) { G.hits = null; return gSearchPaint(); }
+  try {
+    const d = await (await fetch("/api/search?q=" + encodeURIComponent(q))).json();
+    if (G.q !== q) return;
+    G.hits = d.hits; G.searchErr = null;
+  } catch (e) { G.hits = null; G.searchErr = "Search failed: " + e.message; console.log("[overworld] search failed", e.message); }
+  G.hitAt = -1;
+  gSearchPaint();
+}
+function gSearchShown() { const vis = new Set(gVisible().map(p => p.id)); return (G.hits || []).filter(h => vis.has(h.id) && G.pos[h.id]); }
+function gSearchPaint() {
+  G.hitIds = G.hits ? new Set(G.hits.map(h => h.id)) : null;
+  G.svg.classList.toggle("searching", !!G.hits);
+  G.svg.querySelectorAll(".gplanet").forEach(n => n.classList.toggle("hit", !!G.hitIds && G.hitIds.has(n.dataset.id)));
+  const shown = gSearchShown(), hidden = (G.hits || []).length - shown.length;
+  G.searchCount.textContent = G.searchErr ? G.searchErr : !G.hits ? "" : !G.hits.length ? "no matches"
+    : `${shown.length} item${shown.length === 1 ? "" : "s"}${hidden ? ` (+${hidden} dormant, hidden)` : ""} · Enter steps through`;
+  const words = (G.q || "").toLowerCase().split(/\s+/).filter(Boolean);
+  const re = words.length ? new RegExp("(" + words.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|") + ")", "ig") : null;
+  const marked = text => { const s = el("span", "gbsnip"); text.split(re).forEach((part, n) => s.append(n % 2 ? el("mark", "", part) : document.createTextNode(part))); return s; };
+  G.bubbles.replaceChildren(...shown.map((h, n) => {
+    const p = G.data.planets.find(x => x.id === h.id), b = el("div", "gbubble");
+    b.dataset.id = h.id; b.style.setProperty("--i", Math.min(n, 12));
+    b.append(el("b", "", p.title));
+    if (h.field !== "name") { const line = el("div", "gbline"); line.append(el("span", "gbfield", h.field + ": "), marked(h.snippet)); b.append(line); }
+    b.onclick = e => { e.stopPropagation(); gOpenPlanet(h.id); };
+    b.onmouseenter = () => gFocus(h.id);
+    b.onmouseleave = () => gFocus(G.pinned || G.planet);
+    return b;
+  }));
+  gBubblesPlace();
+}
+// Bubbles are placed in rank order; one that would cover a better-ranked bubble is hidden (its planet keeps the orange ring and the hover card shows the match).
+function gBubblesPlace() {
+  if (!G.bubbles || !G.bubbles.childNodes.length) return;
+  const placed = [];
+  G.bubbles.childNodes.forEach(b => {
+    const at = G.pos[b.dataset.id], p = G.data.planets.find(x => x.id === b.dataset.id);
+    const r = Math.max(gRadius(p) * G.cam.k, 10), w = b.offsetWidth, h = b.offsetHeight;
+    const x = G.cam.x + at.x * G.cam.k - w / 2, y = G.cam.y + at.y * G.cam.k - r - 8 - h;
+    b.style.transform = `translate(${x}px, ${y}px)`;
+    const box = { x: x - 3, y: y - 3, r: x + w + 3, b: y + h + 3 };
+    const clash = placed.some(o => box.x < o.r && box.r > o.x && box.y < o.b && box.b > o.y);
+    b.classList.toggle("crowded", clash);
+    if (!clash) placed.push(box);
+  });
+}
+function gSearchStep(dir) {
+  const shown = gSearchShown();
+  if (!shown.length) return;
+  G.hitAt = ((G.hitAt == null ? -1 : G.hitAt) + dir + shown.length) % shown.length;
+  gOpenPlanet(shown[G.hitAt].id);
 }
 
 function gCrumbs() {
@@ -1487,6 +1703,14 @@ function gCrumbs() {
     b.title = "Fly to the next item waiting on you (key n)"; b.onclick = gNextNeeds;
     c.append(b);
   }
+  const dk = gDockedSession();
+  if (G.dockMsg) c.append(el("span", "gdockmsg", G.dockMsg));
+  else if (dk) {
+    const chip = el("span", "gdock");
+    const b = el("button", "", "Send back"); b.title = `Return this tab to ${dk.ws_title || "its workspace"}`; b.onclick = gUndock;
+    chip.append(el("span", "", "Docked: " + dk.title), b);
+    c.append(chip);
+  }
   const fit = el("button", "gfit", "Fit"); fit.title = "Show the whole galaxy (key 0)"; fit.onclick = gGoGalaxy;
   c.append(fit);
   return c;
@@ -1494,7 +1718,12 @@ function gCrumbs() {
 function gRefreshCrumbs() { const old = G.wrap.querySelector(".gcrumbs"); if (old) old.replaceWith(gCrumbs()); }
 
 function gLegend() {
-  const box = el("div", "glegend");
+  let open = false;
+  try { open = localStorage.getItem("ow.glegend") === "1"; } catch (e) {}
+  const box = el("div", "glegend" + (open ? " open" : ""));
+  const head = el("button", "glhead", "Legend & filters");
+  head.onclick = e => { e.stopPropagation(); box.classList.toggle("open"); remember("ow.glegend", box.classList.contains("open") ? "1" : "0"); };
+  box.append(head);
   const counts = {};
   G.data.links.forEach(l => (counts[l.kind] = (counts[l.kind] || 0) + 1));
   const shapes = el("div", "gshapes");
@@ -1505,7 +1734,7 @@ function gLegend() {
   [...GLINES, "project"].forEach(k => {
     const lab = el("label", "k-" + k), cb = el("input");
     cb.type = "checkbox"; cb.checked = G.kinds[k];
-    cb.onchange = () => { G.kinds[k] = cb.checked; remember("ow.gkinds2", JSON.stringify(G.kinds)); gFocus(G.pinned || G.planet); };
+    cb.onchange = () => { G.kinds[k] = cb.checked; remember("ow.gkinds3", JSON.stringify(G.kinds)); gFocus(G.pinned || G.planet); };
     const text = k === "project" ? ` project roads (${G.hubCount} shared projects)` : ` ${GKINDS[k]} (${counts[k] || 0})`;
     lab.append(cb, el("i", "swatch"), document.createTextNode(text));
     box.append(lab);
@@ -1541,6 +1770,13 @@ function gFocus(id) {
   svg.querySelectorAll(".ghub").forEach(h => { h.classList.toggle("near", hubsOn.has(h.dataset.hub)); h.classList.toggle("hidden", !(G.kinds.project || hubsOn.has(h.dataset.hub))); });
   svg.querySelectorAll(".gplanet").forEach(n => { n.classList.toggle("near", near.has(n.dataset.id)); n.classList.toggle("pin", n.dataset.id === id); });
   svg.classList.toggle("incity", !!G.planet && !!G.detail);
+  svg.classList.toggle("insys", G.sys != null);
+  if (G.awaySys !== G.sys) {  // inside a goal, the other goals fade back
+    G.awaySys = G.sys;
+    svg.querySelectorAll(".gplanet").forEach(n => n.classList.toggle("away", G.sys != null && G.pos[n.dataset.id].sys !== G.sys));
+    svg.querySelectorAll(".gsys").forEach(n => n.classList.toggle("away", G.sys != null && n.dataset.sys !== G.sys));
+    svg.querySelectorAll(".glink").forEach(n => n.classList.toggle("away", G.sys != null && G.pos[n.dataset.a].sys !== G.sys && G.pos[n.dataset.b].sys !== G.sys));
+  }
 }
 function gHover(id, e) {
   if (!id) { G.tip.hidden = true; return gFocus(G.pinned || G.planet); }
@@ -1554,6 +1790,7 @@ function gHover(id, e) {
       `${p.sessions} session${p.sessions === 1 ? "" : "s"}`].join(" · ")),
     ...(p.next ? [el("div", "", "Next: " + p.next)] : []),
     ...(p.waits_on ? [el("div", "", "Waits on: " + p.waits_on)] : []),
+    ...((G.hits || []).filter(h => h.id === id && h.field !== "name").map(h => el("div", "gtiphit", `Matched ${h.field}: ${h.snippet}`))),
     ...(L.length ? [el("div", "muted", "Linked: " + Object.entries(kinds).map(([k, n]) => `${n} ${GKINDS[k]}`).join(", "))] : []));
   G.tip.hidden = false; gTipMove(e);
 }
@@ -1564,11 +1801,12 @@ function gTipMove(e) {
 }
 function gAgo(t) { return t ? ago(new Date(t * 1000).toISOString()) + (Date.now() / 1000 - t < 90 ? "" : " ago") : "never"; }
 
-function gGoGalaxy() { G.sys = null; gClosePlanet(true); gRefreshCrumbs(); gFitAll(true); }
-function gGoSystem(id) { G.sys = id; if (G.planet) gClosePlanet(true); gRefreshCrumbs(); gFitSystem(id); }
+function gGoGalaxy() { G.sys = null; gClosePlanet(true); gRefreshCrumbs(); gFocus(null); gFitAll(true); }
+function gGoSystem(id) { G.sys = id; if (G.planet) gClosePlanet(true); gRefreshCrumbs(); gFocus(null); gFitSystem(id); }
 async function gOpenPlanet(id) {
   const p = G.data.planets.find(x => x.id === id);
   if (!p) return;
+  gUndockIfNotIn(p);
   G.planet = id; G.pinned = id; G.sys = G.pos[id].sys;
   G.panel.hidden = false;
   G.panel.replaceChildren(el("div", "tl-prompt", "loading…"));
@@ -1583,6 +1821,7 @@ async function gOpenPlanet(id) {
   gFocus(id);
 }
 function gClosePlanet(quiet) {
+  if (G.planet) gUndockIfNotIn(null);
   G.planet = null; G.pinned = null; G.detail = null;
   if (G.panel) G.panel.hidden = true;
   if (G.cityLayer) G.cityLayer.replaceChildren();
@@ -1591,6 +1830,7 @@ function gClosePlanet(quiet) {
 }
 function gFitPlanet(id, reach) {
   const at = G.pos[id];
+  G.lastReach = reach;
   gFit({ x: at.x - reach, y: at.y - reach, w: reach * 2, h: reach * 2, maxK: 5 }, 40, true, G.panel.hidden ? 0 : G.panel.offsetWidth);
 }
 
@@ -1604,7 +1844,7 @@ function gDrawCities() {
   const layer = G.cityLayer;
   layer.replaceChildren();
   layer.append(svgEl("circle", { class: "cityring", cx: at.x, cy: at.y, r: R }));
-  S.forEach(s => { const c = place[s.transcript]; layer.append(svgEl("line", { class: "spoke", x1: at.x, y1: at.y, x2: c.x, y2: c.y })); });
+  S.forEach((s, i) => { const c = place[s.transcript]; layer.append(svgEl("line", { class: "spoke", x1: at.x, y1: at.y, x2: c.x, y2: c.y, pathLength: 1, style: `--i:${i}` })); });
   S.forEach(s => {
     if (!s.parent || !place[s.parent]) return;
     const a = place[s.parent], b = place[s.transcript];
@@ -1612,16 +1852,18 @@ function gDrawCities() {
   });
   S.forEach((s, i) => {
     const c = place[s.transcript], z = 15;
-    const g = svgEl("g", { class: `gcity st-${s.status}${s.live ? " live" : ""}`, transform: `translate(${c.x},${c.y})` });
+    const g = svgEl("g", { class: `gcity st-${s.status}${s.live ? " live" : ""}`, transform: `translate(${c.x},${c.y})`, style: `--i:${i}` });
     g.append(svgEl("rect", { class: "halo", x: -z / 2 - 6, y: -z / 2 - 6, width: z + 12, height: z + 12, rx: 6 }), svgEl("rect", { class: "body", x: -z / 2, y: -z / 2, width: z, height: z, rx: 3.5 }));
     const below = Math.sin(c.a) > -0.3;
     const t = svgEl("text", { class: "clabel", "text-anchor": Math.abs(Math.cos(c.a)) < 0.3 ? "middle" : Math.cos(c.a) > 0 ? "start" : "end",
       x: Math.abs(Math.cos(c.a)) < 0.3 ? 0 : Math.cos(c.a) > 0 ? z : -z, y: below ? z + 8 : -z });
     t.textContent = s.title.length > 26 ? s.title.slice(0, 25) + "…" : s.title;
     const tt = svgEl("title", {});
-    tt.textContent = `${s.title}\n${s.where || ""} · ${s.live ? LABEL[s.status] || s.status : "closed"}\n${new Date(s.first * 1000).toLocaleString()} → ${new Date(s.last * 1000).toLocaleString()}${s.subagents ? `\n${s.subagents} sub-agents` : ""}${s.brief ? `\nstarted from brief ${s.brief}` : ""}${s.live ? "\nclick to open its tab" : "\nclosed: use Resume in the panel"}`;
+    tt.textContent = `${s.title}\n${s.where || ""} · ${s.live ? LABEL[s.status] || s.status : "closed"}\n${new Date(s.first * 1000).toLocaleString()} → ${new Date(s.last * 1000).toLocaleString()}${s.subagents ? `\n${s.subagents} sub-agents` : ""}${s.brief ? `\nstarted from brief ${s.brief}` : ""}${s.live ? "\nclick to show it beside the map" : s.agent === "claude" && d.state !== "done" ? "\nclosed: click to reopen it beside the map" : "\nclosed"}`;
     g.append(tt, t);
+    const reopen = !s.live && s.agent === "claude" && d.state !== "done";
     if (s.live) g.onclick = e => { e.stopPropagation(); if (!G.moved) gFocusTab(s); };
+    else if (reopen) { g.classList.add("reopen"); g.onclick = e => { e.stopPropagation(); if (!G.moved) gResumeDock(s.transcript, s.title); }; }
     else g.onclick = e => e.stopPropagation();
     layer.append(g);
   });
@@ -1691,7 +1933,47 @@ function gSunPatch() {
   });
 }
 
-function gFocusTab(s) { fetch("/api/focus", { method: "POST", body: JSON.stringify({ workspace: s.workspace, surface: s.live }) }); }
+// Clicking a session docks its real tab in a pane right of the map (same Overworld workspace), so the galaxy stays one glance away.
+function gFocusTab(s) { gDock(s.live); }
+async function gDock(surface) {
+  G.dockMsg = "Docking…"; gRefreshCrumbs();
+  try {
+    const r = await fetch("/api/dock", { method: "POST", body: JSON.stringify({ surface }) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || "HTTP " + r.status);
+    G.dockMsg = "";
+  } catch (e) { G.dockMsg = "Dock failed: " + e.message; }
+  tick();
+}
+// A closed session: reopen it (claude --resume) and dock the new tab beside the map.
+async function gResumeDock(transcript, title) {
+  const id = G.planet;
+  G.dockMsg = `Reopening ${title || "session"}…`; gRefreshCrumbs();
+  try {
+    await workPost("resume", { id, transcript, dock: true });
+    G.dockMsg = "";
+    if (G.planet === id) {
+      G.detail = await (await fetch("/api/planet?id=" + encodeURIComponent(id))).json();
+      if (G.planet === id) { gRenderPlanet(); gDrawCities(); gFocus(id); }
+    }
+  } catch (e) { G.dockMsg = "Reopen failed: " + e.message; }
+  tick();
+}
+async function gUndock() {
+  G.dockMsg = "Sending back…"; gRefreshCrumbs();
+  try { const r = await fetch("/api/undock", { method: "POST", body: "{}" }); const d = await r.json(); if (!r.ok) throw new Error(d.error); G.dockMsg = ""; }
+  catch (e) { G.dockMsg = "Send back failed: " + e.message; }
+  tick();
+}
+// Leaving the item whose session is docked (another item, up a level, closing the panel) sends that session home.
+function gUndockIfNotIn(p) {
+  const id = last && last.docked;
+  if (id && !(p && p.tabs.includes(id))) gUndock();
+}
+function gDockedSession() {
+  const id = last && last.docked;
+  return id ? last.regions.flatMap(r => r.sessions).find(t => t.id === id) : null;
+}
 
 function gRenderPlanet() {
   const d = G.detail, p = G.data.planets.find(x => x.id === d.id) || {};
@@ -1704,9 +1986,19 @@ function gRenderPlanet() {
   meta.append(el("span", "chip st-" + (p.needs ? "waiting" : p.status), st), el("span", "muted", ` active ${gAgo(p.last_active)} · ${d.sessions.filter(s => s.first).length} sessions`));
   const acts = el("div", "gp-acts");
   const live = d.sessions.filter(s => s.live);
-  if (live.length) { const b = el("button", "add", "Open tab"); b.onclick = () => gFocusTab(live.find(s => s.status === "waiting") || live[live.length - 1]); acts.append(b); }
-  else if (d.state !== "done") { const b = el("button", "add", "Resume"); b.onclick = async () => { b.disabled = true; b.textContent = "Resuming…";
-    try { await workPost("resume", { id: d.id }); b.textContent = "Opened"; tick(); } catch (e) { b.textContent = "Failed: " + e.message; } }; acts.append(b); }
+  if (live.length) {
+    const target = live.find(s => s.status === "waiting") || live[live.length - 1];
+    const isDocked = last && live.some(s => s.live === last.docked);
+    const b = el("button", "add", isDocked ? "Send back" : "Show beside map");
+    b.title = isDocked ? "Return the docked tab to its workspace" : "Open its tab in a pane to the right of the map";
+    b.onclick = () => (isDocked ? gUndock() : gFocusTab(target));
+    acts.append(b);
+    const go = el("button", "add", "Go to tab"); go.title = "Switch to its workspace in cmux (leaves the map)";
+    go.onclick = () => fetch("/api/focus", { method: "POST", body: JSON.stringify({ workspace: target.workspace, surface: target.live }) });
+    acts.append(go);
+  }
+  else if (d.state !== "done") { const b = el("button", "add", "Resume beside map"); b.title = "Reopen its latest session and show it beside the map";
+    b.onclick = () => { b.disabled = true; b.textContent = "Reopening…"; gResumeDock(null, d.title); }; acts.append(b); }
   if (live.length && d.state === "active") { const b = el("button", "add", "Park"); b.title = "Write a note, close its tabs"; b.onclick = async () => { b.disabled = true; b.textContent = "Parking…";
     try { const r = await workPost("park", { id: d.id }); b.textContent = "Parked. Next: " + r.next; tick(); } catch (e) { b.textContent = "Failed: " + e.message; } }; acts.append(b); }
   const body = [head, meta];
@@ -1797,16 +2089,10 @@ function gHistory(d) {
     }
   });
   const wrap = el("div", "ghistwrap");
-  wrap.append(svg, el("div", "ghint", "bar = first to last turn · ticks = your prompts · purple curve = spun off with a brief · click a live row to open it"));
+  wrap.append(svg, el("div", "ghint", "bar = first to last turn · ticks = your prompts · purple curve = spun off with a brief · click a live row to show it beside the map"));
   return wrap;
 }
 
-// Arriving from a tab: open the item that tab belongs to.
-function gCameFrom(surface) {
-  if (!G.data || !G.wrap) return setTimeout(() => gCameFrom(surface), 800);
-  const p = G.data.planets.find(x => x.tabs.includes(surface));
-  if (p && G.pos[p.id]) gOpenPlanet(p.id);
-}
 function renderGalaxy(state) {
   galaxyFetch(false);
   if (!G.data) { map.replaceChildren(el("div", "tl-prompt", "Mapping the galaxy…")); return; }
@@ -1838,10 +2124,10 @@ document.addEventListener("keydown", e => {
   if (view !== "galaxy" || typing(e) || !ib.hidden || tlSession) return;
   if (e.key === "Escape") { if (G.planet) { gClosePlanet(); if (G.sys != null) gFitSystem(G.sys); } else if (G.sys != null) gGoGalaxy(); }
   else if (e.key === "n") gNextNeeds();
+  else if (e.key === "/") { e.preventDefault(); G.searchInput.focus(); G.searchInput.select(); }
   else if (e.key === "0") gGoGalaxy();
   else if (e.key === "=" || e.key === "+" || e.key === "-") {
-    const k = Math.max(0.12, Math.min(7, G.cam.k * (e.key === "-" ? 0.8 : 1.25))), cx = G.wrap.clientWidth / 2, cy = G.wrap.clientHeight / 2;
-    G.cam.x = cx - ((cx - G.cam.x) * k) / G.cam.k; G.cam.y = cy - ((cy - G.cam.y) * k) / G.cam.k; G.cam.k = k; gApply();
+    gZoomBy(e.key === "-" ? 0.8 : 1.25, G.wrap.clientWidth / 2, G.wrap.clientHeight / 2);
   }
 });
 window.addEventListener("mousemove", e => {
@@ -1849,9 +2135,19 @@ window.addEventListener("mousemove", e => {
   const dx = e.clientX - G.drag.x, dy = e.clientY - G.drag.y;
   if (Math.abs(dx) + Math.abs(dy) > 4) { G.moved = true; G.svg.classList.add("panning"); }
   if (G.moved) { G.cam.x = G.drag.cx + dx; G.cam.y = G.drag.cy + dy; gApply(); }
+  const d = G.drag, now = performance.now(), dt = Math.max(1, now - d.pt);  // pointer speed in px/ms, smoothed over the last few moves
+  d.vx = 0.7 * d.vx + 0.3 * ((e.clientX - d.px) / dt); d.vy = 0.7 * d.vy + 0.3 * ((e.clientY - d.py) / dt);
+  d.px = e.clientX; d.py = e.clientY; d.pt = now;
 });
-window.addEventListener("mouseup", () => { if (!G.drag) return; G.drag = null; G.svg.classList.remove("panning"); setTimeout(() => (G.moved = false), 0); });
-window.addEventListener("resize", () => { if (view === "galaxy" && G.wrap) { if (G.pendingFit) gFit(G.pendingFit[0], G.pendingFit[1], false, G.pendingFit[2]); else gApply(); } });
+window.addEventListener("mouseup", () => { if (!G.drag) return;
+  if (G.moved && performance.now() - G.drag.pt < 80) gGlide(G.drag.vx, G.drag.vy);
+  G.drag = null; G.svg.classList.remove("panning"); setTimeout(() => (G.moved = false), 0); });
+window.addEventListener("resize", () => {  // docking a tab narrows the map: keep the current level in view
+  if (view !== "galaxy" || !G.wrap) return;
+  if (G.pendingFit) return gFit(G.pendingFit[0], G.pendingFit[1], false, G.pendingFit[2]);
+  clearTimeout(G.resizeT);
+  G.resizeT = setTimeout(() => { if (G.planet && G.lastReach) gFitPlanet(G.planet, G.lastReach); else if (G.sys != null) gFitSystem(G.sys); else gFitAll(true); }, 150);
+});
 
 // ---------- Work view: work items are the unit; their tabs hang under them. The tab map is one key (w) away. ----------
 let view = "work";
@@ -2451,7 +2747,7 @@ async function tick() {
     if (pageVersion && state.page && state.page !== pageVersion) return location.reload();  // index.html changed on disk: load the new page
     pageVersion = pageVersion || state.page;
     if (came && came.at > seenCame) {
-      if (seenCame || Date.now() / 1000 - came.at < 60) { mapPin = "t:" + came.id; sel = came.id; scrollPin = true; if (view === "galaxy") gCameFrom(came.id); }
+      if (seenCame || Date.now() / 1000 - came.at < 60) { mapPin = "t:" + came.id; sel = came.id; scrollPin = true; }
       seenCame = came.at;
     }
     if (!dragging && !draggingRegion && !draggingItem && !editing) render(last);  // re-rendering mid-drag or mid-rename would drop it
