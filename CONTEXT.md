@@ -282,3 +282,30 @@ Personal tool. Visual "overworld" of all cmux agent sessions (workspaces = regio
 - Docking only ever worked for sessions with an open tab; clicking a closed session did nothing (user hit this on "New Discover Report Run", both sessions closed).
 - Now a closed Claude session city is clickable: `POST /api/work/resume {id, transcript, dock: true}` reopens that exact transcript (`resume(..., transcript=)`), waits for the new tab to appear in the tree, and docks it. The panel's Resume became "Resume beside map" (latest session, docked). The flat Work view's Resume still switches to the workspace.
 - Verified: client sends the right request (stubbed POST in Chrome); server path tested with a throwaway OWDOCKTEST tab: new tab visible after 0.2s, docked into Overworld, sent back to Scratch, closed.
+
+## 2026-11-19: Depth pass (option B)
+- Planets, suns and cities share one highlight-and-shadow overlay (`#gshade`), so they read as lit spheres; suns get a hot-core gradient (`#gsun`).
+- Working items glow blue and items that need you glow amber (CSS drop-shadow on those only).
+- Each goal sits in a faint coloured haze (`.nebula`, 5 hues); it fades with the other goal when you're inside one.
+- Parallax stars: a canvas behind the map (`gStars`, called from `gApply`) with 3 layers that move 6%, 16% and 32% as much as the map. Redraw costs ~0.2ms a frame.
+
+## 2026-11-19: Star-system pass (option A)
+- Layout (`gLayout`): one orbit per item, gaps widen outward (36+4n world units), golden-angle placement nudged so planets keep 56 units clear. Needs-you items orbit closest. Dormant items form an outer asteroid belt (dotted `.belt` rings). Galaxy grew from ~2x to 6365x5126 world units.
+- Planet look from a stable hash of the item id (`gHash`): gas giant (3 band patterns), cratered rock, ice (frost cap + thin atmosphere), ringed giant (ring drawn behind and in front). Idle planets get their own muted hue; working/needs/done colours unchanged. Size varies +-15% around the sessions-based radius.
+- Suns: size grows with item count (46 + 8*sqrt(n), max 92); under 7 items an orange dwarf, under 14 a yellow sun, else white-hot. Each has a corona.
+- Names: inside a goal, names show at any zoom and sit just under the planet. `gLabelCull` hides names that would land on another planet or name (needs-you and working keep theirs first); hover or pin shows a hidden name.
+
+## 2026-11-19: Design-review fixes (Fable 5.2 review, all 12)
+Review screenshots: `.shots/review-*.png`; after: `.shots/fix-*.png`.
+1. Needs-you planets always show their name (amber, bold) at every zoom; the breadcrumb button names the next one ("Needs you: <title> (+n)").
+2. `gAutoSys`: zooming in by hand past 2x the whole-galaxy zoom with a goal under the screen centre makes it the current goal (names + breadcrumb); below 1.5x it leaves.
+3. A goal opens fitted to its inner 8 orbits (`s.inner`), not its full reach: zoom 0.27-0.38 -> 0.52-0.92; planets 21-54px instead of a flat 20px.
+4. `gFit` keeps a 64px top band clear for breadcrumb/search. Inside a goal the floating title/count hide; the breadcrumb carries "N active · N needs you".
+5. Amber only means needs-you: search rings/bubbles are white/blue, minimap goal outlines grey, goal counts muted, small-goal suns are red dwarfs.
+6. Search never dims needs-you items; bubbles keep clear of the breadcrumb, search box and results list.
+7. Header hint line shows galaxy keys while in the galaxy.
+8. Minimap dots are fixed screen sizes: needs-you 4px with a pulse, working 2.5px.
+9. Search results list under the box (title, status, goal, matched snippet). Arrow keys light the planet without moving the camera; Enter or click opens.
+10. One-session items (47 of 63 active) open the panel without flying in or drawing cities; camera only moves if the planet is off-screen or under the panel. "Show/Resume beside map" is the filled primary button. The panel now starts below the header.
+11. Systems pack to the real viewport shape (clamped 1.2-2.6); orbit gap growth capped at 64. Galaxy 6365x5126 -> 6394x4090, fit zoom 0.128 -> 0.145.
+12. Idle hues limited to 240-340 (purple to rose). A ring now means "has an open tab" (ring shown via `.live`); surface type (gas/rock/ice) stays decorative. Legend explains colours and rings.

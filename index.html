@@ -377,18 +377,30 @@
   /* Galaxy view */
   main.gmode { padding: 0; display: block; }
   .galaxy { position: relative; height: calc(100vh - var(--hh, 90px)); overflow: hidden; background: radial-gradient(ellipse at 50% 40%, #191b28 0%, var(--bg) 70%); }
-  .gsvg { width: 100%; height: 100%; display: block; cursor: grab; user-select: none; }
+  .gsvg { position: relative; width: 100%; height: 100%; display: block; cursor: grab; user-select: none; }
+  .gstars { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .nebula { pointer-events: none; transition: opacity .25s; }
+  .shade { pointer-events: none; }
+  .gplanet.st-working .body, .gcity.st-working .body { filter: drop-shadow(0 0 6px rgba(76,141,255,.55)); }
+  .gplanet.needs .body, .gcity.st-waiting .body { filter: drop-shadow(0 0 8px rgba(255,176,32,.6)); }
   .gsvg.panning { cursor: grabbing; }
-  .orbit { fill: none; stroke: var(--line); stroke-width: 1; vector-effect: non-scaling-stroke; stroke-dasharray: 2 5; }
-  .sun { fill: #2a2416; stroke: #f5c56b; stroke-width: 1.5; vector-effect: non-scaling-stroke; cursor: pointer; filter: drop-shadow(0 0 18px rgba(245,197,107,.35)); }
+  .orbit { fill: none; stroke: rgba(200,210,255,.05); stroke-width: 1; vector-effect: non-scaling-stroke; }
+  .corona, .tex, .atmo, .pring, .belt { pointer-events: none; }
+  .belt { fill: none; stroke: #9aa0c0; stroke-opacity: .28; stroke-width: 2; vector-effect: non-scaling-stroke; stroke-dasharray: 1 9; stroke-linecap: round; }
+  .belt.b1 { stroke-dasharray: 2 14; stroke-opacity: .2; }
+  .belt.b2 { stroke-dasharray: 1 17; }
+  .atmo { fill: none; stroke: #bfe6ff; stroke-opacity: .35; stroke-width: 2.5; vector-effect: non-scaling-stroke; }
+  .gplanet:not(.live) .pring { display: none; }
+  .pring { fill: none; stroke: hsl(var(--h) 30% 75%); stroke-opacity: .5; }
+  .sun { fill: #2a2416; stroke: var(--sc, #f5c56b); stroke-width: 1.5; vector-effect: non-scaling-stroke; cursor: pointer; filter: drop-shadow(0 0 18px rgba(245,197,107,.35)); }
   .sun.nogoal { fill: #1f2130; stroke: var(--idle); filter: none; }
   .gsys:hover .sun { stroke-width: 3; }
   .slabel { fill: var(--text); font-weight: 600; font-size: calc(15px / var(--k, 1)); letter-spacing: .03em; pointer-events: none; }
-  .scount { fill: #f5c56b; font-size: calc(11px / var(--k, 1)); pointer-events: none; }
+  .scount { fill: var(--muted); font-size: calc(11px / var(--k, 1)); pointer-events: none; }
   .gplanet { cursor: pointer; }
-  .gplanet .body { fill: var(--idle); stroke: var(--bg); stroke-width: 2; vector-effect: non-scaling-stroke; }
+  .gplanet .body { fill: hsl(var(--h, 230) 14% 40%); stroke: var(--bg); stroke-width: 2; vector-effect: non-scaling-stroke; }
   .gplanet .halo { fill: none; stroke: transparent; stroke-width: 2.5; vector-effect: non-scaling-stroke; }
-  .gplanet.live .body { fill: #8a8ea3; }
+  .gplanet.live .body { fill: hsl(var(--h, 230) 22% 60%); }
   .gplanet.st-working .body { fill: var(--working); }
   .gplanet.st-done .body { fill: var(--done); }
   .gplanet.needs .body { fill: var(--waiting); }
@@ -400,6 +412,10 @@
   .plabel { fill: var(--text); font-size: calc(11.5px / var(--k, 1)); pointer-events: none; paint-order: stroke; stroke: var(--bg); stroke-width: calc(3px / var(--k, 1)); }
   .pcount { fill: var(--bg); font-size: 13px; font-weight: 700; pointer-events: none; }
   .gsvg.far .plabel { display: none; }
+  .plabel.lhide { visibility: hidden; }
+  .gsvg:not(.incity) .gplanet.needs:not(.away) .plabel { display: inline !important; visibility: visible !important; fill: var(--waiting); font-weight: 600; }
+  .gplanet:hover .plabel.lhide, .gplanet.pin .plabel.lhide { visibility: visible; }
+  .gsvg.insys .gplanet:not(.away):not(.dormant) .plabel { display: inline; }
   .gsvg.far .gplanet.near.pin .plabel { display: inline; }
   .flare { fill: none; stroke: transparent; stroke-width: 3; vector-effect: non-scaling-stroke; pointer-events: none; }
   .gsys.alert .flare { stroke: var(--waiting); animation: beacon 1.6s ease-out infinite; transform-box: fill-box; transform-origin: center; }
@@ -443,7 +459,7 @@
   .gshapes .lg-planet { fill: #8a8ea3; }
   .gshapes .lg-city { fill: #8a8ea3; }
   .gshapes .lg-hub { fill: #232637; stroke: #9aa0c0; }
-  .gshapes .sun { filter: none; }
+  .gshapes .sun { filter: none; fill: #2a2416; }
   .glink { fill: none; stroke-width: 1.6; vector-effect: non-scaling-stroke; opacity: .55; pointer-events: none; }
   .glink.hidden { display: none; }
   .k-spinoff { stroke: var(--tool); --sw: var(--tool); }
@@ -460,6 +476,9 @@
   .gcrumbs { position: absolute; top: 12px; left: 16px; display: flex; gap: 6px; align-items: center; background: rgba(18,19,26,.85); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
   .gcrumbs button { background: none; border: 0; color: var(--working); font: inherit; cursor: pointer; padding: 0; }
   .gcrumbs .cur { color: var(--text); font-weight: 600; }
+  .gcrumbs .gcount { color: var(--muted); }
+  .gcrumbs .gcount.alert { color: var(--waiting); }
+  .gsvg.insys .gsys:not(.away) .slabel, .gsvg.insys .gsys:not(.away) .scount { display: none; }
   .gcrumbs .sep { color: var(--muted); }
   .gcrumbs .gfit { margin-left: 10px; color: var(--muted); border: 1px solid var(--line); border-radius: 5px; padding: 1px 7px; }
   .glegend { position: absolute; left: 16px; bottom: 14px; display: flex; flex-direction: column; gap: 3px; background: rgba(18,19,26,.85); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; color: var(--muted); max-width: 340px; }
@@ -475,7 +494,7 @@
   .gsvg:not(.close):not(.insys) .gplanet:not(.needs):not(.st-working):not(.near):not(.pin):not(.hit) .plabel { display: none; }
   .gplanet.dormant:not(.needs) { opacity: .3; }
   .gplanet.dormant:not(.needs):not(.near):not(.pin) .plabel, .gplanet.dormant .pcount { display: none; }
-  .gsvg.insys .gplanet.away, .gsvg.insys .gsys.away, .gsvg.insys .glink.away { opacity: .07; }
+  .gsvg.insys .gplanet.away, .gsvg.insys .gsys.away, .gsvg.insys .nebula.away, .gsvg.insys .glink.away { opacity: .07; }
   .gsvg.insys .gplanet.away .plabel { display: none; }
   .glegend:not(.open) > :not(.glhead) { display: none; }
   .glegend .glhead { background: none; border: 0; color: var(--muted); font: inherit; cursor: pointer; padding: 0; text-align: left; }
@@ -484,10 +503,11 @@
   .gmini { position: absolute; bottom: 14px; right: 16px; width: 190px; height: 130px; background: rgba(18,19,26,.88); border: 1px solid var(--line); border-radius: 8px; padding: 4px; cursor: crosshair; opacity: 0; pointer-events: none; transition: opacity .2s ease-out; z-index: 3; }
   .gmini.on { opacity: 1; pointer-events: auto; }
   .gmini svg { width: 100%; height: 100%; display: block; }
-  .gmini .msun { fill: rgba(245,165,36,.07); stroke: rgba(245,165,36,.35); stroke-width: 1; vector-effect: non-scaling-stroke; }
+  .gmini .msun { fill: rgba(200,210,255,.04); stroke: rgba(200,210,255,.22); stroke-width: 1; vector-effect: non-scaling-stroke; }
   .gmini .mdot { fill: #6d7392; }
   .gmini .mdot.working { fill: var(--working); }
-  .gmini .mdot.needs { fill: var(--waiting); }
+  .gmini .mdot.needs { fill: var(--waiting); animation: mpulse 1.4s ease-in-out infinite; }
+  @keyframes mpulse { 50% { opacity: .35; } }
   .gmini .mview { fill: rgba(255,255,255,.08); stroke: var(--text); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
   /* Motion: focus and search fade instead of snapping; sessions and bubbles enter one after another; the item panel slides in. */
   .gplanet, .glink, .groad, .ghub, .gsys, .glinks, .ghubs { transition: opacity .18s ease-out; }
@@ -508,25 +528,37 @@
   .gsearch input:focus { border-color: var(--working); }
   .gscount { color: var(--muted); font-size: 12px; background: rgba(18,19,26,.75); border-radius: 5px; padding: 1px 6px; }
   .gscount:empty { display: none; }
+  .gsearch { flex-wrap: wrap; }
+  .gslist { flex: 0 0 380px; width: 380px; max-height: min(52vh, 460px); overflow-y: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.45); padding: 4px; }
+  .gslist[hidden] { display: none; }
+  .gsrow { display: block; width: 100%; text-align: left; background: none; border: 0; border-radius: 6px; color: var(--text); font: inherit; padding: 6px 8px; cursor: pointer; }
+  .gsrow:hover, .gsrow.sel { background: rgba(120,160,255,.14); }
+  .gsr-top { display: flex; gap: 8px; align-items: baseline; justify-content: space-between; }
+  .gsr-top b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .gsr-top .chip { flex: none; font-size: 11px; }
+  .gsr-goal { color: var(--muted); font-size: 11px; }
+  .gsr-snip { color: var(--muted); font-size: 12px; margin-top: 2px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .gsr-snip mark { background: rgba(120,160,255,.35); color: var(--text); border-radius: 2px; }
   .gbubbles { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 1; }
   .gcrumbs, .gsearch { z-index: 3; }
   .gbubble.crowded { visibility: hidden; }
   .gbubble .gbline { display: none; }
   .gbubble:hover .gbline { display: block; }
   .gbubble:hover { max-width: 300px; }
-  .gbubble { position: absolute; left: 0; top: 0; max-width: 200px; pointer-events: auto; cursor: pointer; background: var(--panel); border: 1px solid var(--waiting); border-radius: 8px; padding: 5px 8px; font-size: 12px; line-height: 1.35; box-shadow: 0 4px 16px rgba(0,0,0,.45); opacity: .93; }
-  .gbubble::after { content: ""; position: absolute; left: 50%; bottom: -6px; width: 10px; height: 10px; background: var(--panel); border-right: 1px solid var(--waiting); border-bottom: 1px solid var(--waiting); transform: translateX(-50%) rotate(45deg); }
+  .gbubble { position: absolute; left: 0; top: 0; max-width: 200px; pointer-events: auto; cursor: pointer; background: var(--panel); border: 1px solid #c3c8e6; border-radius: 8px; padding: 5px 8px; font-size: 12px; line-height: 1.35; box-shadow: 0 4px 16px rgba(0,0,0,.45); opacity: .93; }
+  .gbubble::after { content: ""; position: absolute; left: 50%; bottom: -6px; width: 10px; height: 10px; background: var(--panel); border-right: 1px solid #c3c8e6; border-bottom: 1px solid #c3c8e6; transform: translateX(-50%) rotate(45deg); }
   .gbubble:hover { z-index: 2; opacity: 1; }
   .gbubble b { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .gbubble .gbfield { color: var(--muted); }
   .gbubble .gbsnip { color: var(--text); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-  .gbubble mark { background: rgba(245,165,36,.3); color: var(--text); border-radius: 2px; }
-  .gsvg.searching .gplanet:not(.hit):not(.near) { opacity: .12; }
-  .gsvg.searching .gplanet.hit .halo { stroke: var(--waiting); }
+  .gbubble mark { background: rgba(120,160,255,.35); color: var(--text); border-radius: 2px; }
+  .gsvg.searching .gplanet:not(.hit):not(.near):not(.needs) { opacity: .12; }
+  .gsvg.searching .gplanet.hit .halo { stroke: #fff; }
   .gsvg.searching .glink:not(.on), .gsvg.searching .groad:not(.on), .gsvg.searching .ghub:not(.near) { opacity: .08; }
   .muted { color: var(--muted); }
-  #gplanet { position: fixed; top: 0; right: 0; bottom: 0; width: min(640px, 48vw); background: var(--panel); border-left: 1px solid var(--line); overflow-y: auto; padding: 14px 18px 40px; z-index: 5; box-shadow: -8px 0 30px rgba(0,0,0,.35); }
-  #gplanet[hidden] { display: none; }
+  #gplanet .add.primary { background: var(--working); border-color: var(--working); color: #fff; font-weight: 600; padding: 4px 12px; }
+  #gplanet { position: fixed; top: var(--hh, 90px); right: 0; bottom: 0; width: min(640px, 48vw); background: var(--panel); border-left: 1px solid var(--line); overflow-y: auto; padding: 14px 18px 40px; z-index: 5; box-shadow: -8px 0 30px rgba(0,0,0,.35); }
+  #gplanet[hidden], #gplanet.tucked { display: none; }
   #gplanet h2 { font-size: 16px; margin: 0; flex: 1; }
   #gplanet h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 18px 0 6px; }
   #gplanet p { margin: 6px 0; }
@@ -1364,24 +1396,34 @@ function gLayout() {
   const systems = gSystems(), planets = gVisible(), pos = {}, suns = {};
   const bySys = Object.fromEntries(systems.map(s => [s.id, []]));
   planets.forEach(p => (bySys[p.group] || bySys[""]).push(p));
-  let maxR = 260;
-  const rings = {};
+  // Like a real solar system: each item gets its own orbit, the gaps widen going outward, and items sit at scattered points
+  // on their orbits (golden-angle spread, nudged apart). What needs you orbits closest. Dormant items form an outer asteroid belt.
+  const rings = {}, ext = {};
   systems.forEach(s => {
     const list = bySys[s.id].sort((a, b) => rank(a) - rank(b) || b.last_active - a.last_active);
-    const placed = [];
-    let ring = 0, i = 0;
-    while (i < list.length) {
-      const r = 175 + ring * 118, cap = Math.max(6, Math.floor((2 * Math.PI * r) / 118));
-      const take = list.slice(i, i + cap);
-      take.forEach((p, k) => placed.push({ p, r, a: (k / take.length) * 2 * Math.PI - Math.PI / 2 + ring * 0.35 }));
-      i += take.length; ring++;
-    }
+    const rocky = p => p.dormant && !p.needs, act = list.filter(p => !rocky(p)), rocks = list.filter(rocky);
+    const sr = Math.min(92, 46 + 8 * Math.sqrt(list.length)), placed = [];
+    let inner = 0;
+    let r = sr + 34, prev = 0;
+    act.forEach((p, n) => {
+      const pr = gRadius(p);
+      r += n ? Math.max(Math.min(64, 36 + 2.5 * n), (prev + pr) * 0.8) : pr + 30;
+      let a = n * 2.39996 + (gHash(p.id, 1) - 0.5) * 0.8, tries = 0;
+      const clear = a => placed.every(q => Math.hypot(r * Math.cos(a) - q.r * Math.cos(q.a), r * Math.sin(a) - q.r * Math.sin(q.a)) >= q.pr + pr + 56);
+      while (!clear(a) && tries++ < 60) a += 0.11;
+      placed.push({ p, r, a, pr }); prev = pr;
+      if (n === 7) inner = r + pr + 50;
+    });
+    const belt = rocks.length ? r + prev + 70 : 0;
+    rocks.forEach((p, k) => placed.push({ p, r: belt + (gHash(p.id, 2) - 0.5) * 40, a: (k / rocks.length) * 2 * Math.PI + (gHash(p.id, 3) - 0.5) * (4 / rocks.length), pr: 8 }));
     rings[s.id] = placed;
-    maxR = Math.max(maxR, 175 + Math.max(0, ring - 1) * 118 + 70);
+    const reach = Math.max(belt + 40, r + prev + 30, sr + 120);
+    ext[s.id] = { sr, belt, reach, inner: inner ? Math.max(inner, sr + 160) : reach };
   });
   // Pack systems by their own size in rows aimed at a screen-shaped (16:10) block, so a big goal doesn't make every cell big.
-  const GAP = 150, reachOf = id => rings[id].reduce((m, q) => Math.max(m, q.r), 120) + 60;
-  const area = systems.reduce((a, s) => a + (2 * reachOf(s.id) + GAP) ** 2, 0), rowW = Math.sqrt(area * 1.6);
+  const GAP = 150, reachOf = id => ext[id].reach;
+  const hh = (document.querySelector("header") || {}).offsetHeight || 90, aspect = Math.max(1.2, Math.min(2.6, innerWidth / Math.max(300, innerHeight - hh)));
+  const area = systems.reduce((a, s) => a + (2 * reachOf(s.id) + GAP) ** 2, 0), rowW = Math.sqrt(area * aspect);
   const rows = [[]];
   let wNow = 0;
   systems.forEach(s => { const d = 2 * reachOf(s.id) + GAP; if (wNow + d > rowW * 1.15 && rows[rows.length - 1].length) { rows.push([]); wNow = 0; } rows[rows.length - 1].push(s); wNow += d; });
@@ -1392,7 +1434,7 @@ function gLayout() {
     let x = (W - widths[ri]) / 2;
     row.forEach(s => {
       const reach = reachOf(s.id), cx = x + GAP / 2 + reach, cy = y + h / 2;
-      suns[s.id] = { x: cx, y: cy, r: 74, title: s.title, planets: bySys[s.id], reach };
+      suns[s.id] = { x: cx, y: cy, r: ext[s.id].sr, belt: ext[s.id].belt, inner: ext[s.id].inner, n: bySys[s.id].length, title: s.title, planets: bySys[s.id], reach };
       rings[s.id].forEach(({ p, r, a }) => { pos[p.id] = { x: cx + r * Math.cos(a), y: cy + r * Math.sin(a), sys: s.id }; });
       x += 2 * reach + GAP;
     });
@@ -1401,8 +1443,11 @@ function gLayout() {
   return { pos, suns, w: W, h: y + 20 };
 }
 
-function gRadius(p) { return p.dormant && !p.needs ? 8 : Math.min(40, 17 + 6 * Math.sqrt(p.sessions)); }
+function gRadius(p) { return p.dormant && !p.needs ? 8 : Math.min(42, (17 + 6 * Math.sqrt(p.sessions)) * (0.85 + 0.3 * gHash(p.id, 4))); }
+// Stable 0..1 number from an id, so each item keeps the same look, size and spot on every load.
+function gHash(str, salt = 0) { let h = 2166136261 ^ salt; for (let i = 0; i < str.length; i++) h = Math.imul(h ^ str.charCodeAt(i), 16777619); h ^= h >>> 13; h = Math.imul(h, 1597334677); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
 function gApply() {
+  gStars();
   G.world.setAttribute("transform", `translate(${G.cam.x},${G.cam.y}) scale(${G.cam.k})`); G.svg.style.setProperty("--k", G.cam.k);
   G.svg.classList.toggle("far", G.cam.k < 0.62);
   G.svg.classList.toggle("close", G.cam.k >= 1.1);
@@ -1410,7 +1455,63 @@ function gApply() {
   gMiniPlace();
   if (G.lastK === G.cam.k) return;
   G.lastK = G.cam.k;
-  G.world.querySelectorAll(".gplanet .orb").forEach(o => { const s = Math.max(1, 10 / (+o.dataset.r * G.cam.k)); o.setAttribute("transform", s > 1 ? `scale(${s})` : ""); });
+  G.world.querySelectorAll(".gplanet .orb").forEach(o => { const s = Math.max(1, 10 / (+o.dataset.r * G.cam.k)); o.setAttribute("transform", s > 1 ? `scale(${s})` : "");
+    const t = o.nextElementSibling; if (t && t.classList.contains("plabel")) t.setAttribute("y", +o.dataset.r * s + 14 / G.cam.k); });  // name sits just under the planet at any zoom
+  clearTimeout(G.cullT); G.cullT = setTimeout(() => { gAutoSys(); gLabelCull(); }, 120);
+}
+// Parallax stars: three layers behind the map that move less than the map does (far layer least), so panning and zooming feel like moving through depth.
+const GNEB = ["#7b6cff", "#3fb6c8", "#e0679c", "#4c8dff", "#c79a3a"];
+const GSTAR_T = 900;
+const GSTAR_LAYERS = [{ d: 0.06, n: 140, s: 0.7, a: 0.35 }, { d: 0.16, n: 70, s: 1.1, a: 0.5 }, { d: 0.32, n: 28, s: 1.6, a: 0.7 }].map((L, li) => {
+  let seed = 7919 * (li + 1); const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  return { ...L, pts: Array.from({ length: L.n }, () => [rnd() * GSTAR_T, rnd() * GSTAR_T, 0.5 + rnd() * 0.8]) };
+});
+function gStars() {
+  const c = G.stars, W = c.clientWidth, H = c.clientHeight, dpr = devicePixelRatio || 1;
+  if (!W) return;
+  if (c.width !== Math.round(W * dpr) || c.height !== Math.round(H * dpr)) { c.width = Math.round(W * dpr); c.height = Math.round(H * dpr); }
+  const x = c.getContext("2d");
+  x.setTransform(dpr, 0, 0, dpr, 0, 0); x.clearRect(0, 0, W, H); x.fillStyle = "#dfe3ff";
+  const mod = (a, b) => ((a % b) + b) % b;
+  GSTAR_LAYERS.forEach(L => {
+    const f = Math.pow(G.cam.k, L.d), T = GSTAR_T * f, ox = mod(G.cam.x * L.d, T), oy = mod(G.cam.y * L.d, T), sz = L.s * Math.sqrt(f);
+    for (let tx = ox - T; tx < W; tx += T) for (let ty = oy - T; ty < H; ty += T)
+      L.pts.forEach(([px, py, b]) => { const X = tx + px * f, Y = ty + py * f; if (X < 0 || Y < 0 || X > W || Y > H) return;
+        x.globalAlpha = L.a * b; x.fillRect(X - sz / 2, Y - sz / 2, sz, sz); });
+  });
+  x.globalAlpha = 1;
+}
+// Once the camera settles: zoomed in well past the whole-galaxy view with a goal under the centre of the screen, that goal
+// becomes the current one (names show, breadcrumb names it). Zooming back out near the whole-galaxy view leaves it.
+function gAutoSys() {
+  if (!G.wrap || G.planet || !G.layout) return;
+  const L = G.layout, W = G.wrap.clientWidth, H = G.wrap.clientHeight, k = G.cam.k;
+  const fitK = Math.min((W - 60) / L.w, (H - 124) / L.h);
+  const cx = (W / 2 - G.cam.x) / k, cy = (H / 2 + 32 - G.cam.y) / k;
+  let next = G.sys;
+  if (k < fitK * 1.5) next = null;
+  else if (k >= Math.max(0.22, fitK * 2)) {
+    const hit = Object.entries(G.suns).find(([, s]) => Math.hypot(s.x - cx, s.y - cy) < s.reach);
+    if (hit) next = hit[0];
+  }
+  if (next === G.sys) return;
+  G.sys = next; gRefreshCrumbs(); gFocus(G.pinned);
+}
+// Names that would land on another planet or another name are hidden (most urgent items keep theirs); hovering a planet shows its name.
+function gLabelCull() {
+  if (!G.world) return;
+  const pri = n => (n.classList.contains("needs") ? 0 : n.classList.contains("st-working") ? 1 : n.classList.contains("live") ? 2 : 3);
+  const nodes = [...G.world.querySelectorAll(".gplanet:not(.away)")];
+  const hit = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+  const bodies = nodes.map(n => ({ n, r: n.querySelector(".body").getBoundingClientRect() }));
+  const taken = [];
+  nodes.map(n => ({ n, t: n.querySelector(".plabel") })).filter(x => x.t && getComputedStyle(x.t).display !== "none")
+    .sort((a, b) => pri(a.n) - pri(b.n)).forEach(({ n, t }) => {
+      const r = t.getBoundingClientRect();
+      const blocked = taken.some(o => hit(r, o)) || bodies.some(b => b.n !== n && hit(r, b.r));
+      t.classList.toggle("lhide", blocked);
+      if (!blocked) taken.push(r);
+    });
 }
 // Camera motion. Each motion takes a number from G.anim; starting another (or grabbing the map) bumps it, which stops the old one.
 const RM = matchMedia("(prefers-reduced-motion: reduce)");
@@ -1459,8 +1560,9 @@ function gFit(box, pad = 40, animate = true, rightInset = 0) {
   const W = G.wrap.clientWidth - rightInset, H = G.wrap.clientHeight;
   if (W < 200 || H < 200) { G.pendingFit = [box, pad, rightInset]; G.cam = G.cam || { k: 0.3, x: 0, y: 0 }; return; }  // tab hidden (cmux workspace not shown): fit once it has a size
   G.pendingFit = null;
-  const k = Math.min((W - pad * 2) / box.w, (H - pad * 2) / box.h, box.maxK || 2.2);
-  const to = { k, x: (W - box.w * k) / 2 - box.x * k, y: (H - box.h * k) / 2 - box.y * k };
+  const top = 64;  // the breadcrumb and search box sit in this band
+  const k = Math.min((W - pad * 2) / box.w, (H - top - pad * 2) / box.h, box.maxK || 2.2);
+  const to = { k, x: (W - box.w * k) / 2 - box.x * k, y: top + (H - top - box.h * k) / 2 - box.y * k };
   if (!animate || !G.cam || RM.matches) { gStop(); G.cam = to; return gApply(); }
   gTween(to);
 }
@@ -1477,13 +1579,26 @@ function gTween(to) {
   })(t0);
 }
 function gFitAll(animate) { const L = G.layout; gFit({ x: 0, y: 0, w: L.w, h: L.h }, 30, animate); }
-function gFitSystem(id, animate = true) { const s = G.suns[id]; if (!s) return; gFit({ x: s.x - s.reach, y: s.y - s.reach, w: s.reach * 2, h: s.reach * 2 }, 30, animate, G.planet ? G.panel.offsetWidth : 0); }
+// A goal opens on its inner orbits (where what needs you and what's working sit), so planets are big enough to read; the outer ones are a pan away.
+function gFitSystem(id, animate = true) { const s = G.suns[id]; if (!s) return; const R = s.inner || s.reach;
+  gFit({ x: s.x - R, y: s.y - R, w: R * 2, h: R * 2 }, 30, animate, G.planet ? G.panel.offsetWidth : 0); }
 
 function gPlanetEl(p) {
   const at = G.pos[p.id], r = gRadius(p);
   const g = svgEl("g", { class: "gplanet", "data-id": p.id, transform: `translate(${at.x},${at.y})` });
   const orb = svgEl("g", { class: "orb", "data-r": r });  // scaled up when zoomed far out so it never shrinks below ~10px
-  orb.append(svgEl("circle", { class: "halo", r: r + 9 }), svgEl("circle", { class: "body", r }));
+  // Each item gets a surface from its id: banded gas giant, cratered rock or ice world. Status sets the colour; a ring means it has an open tab.
+  const rocky = p.dormant && !p.needs, kind = rocky ? "rock" : ["gas", "rock", "ice"][Math.floor(gHash(p.id, 5) * 3)];
+  const tilt = Math.round((gHash(p.id, 6) - 0.5) * 70), tex = kind;
+  g.classList.add("pk-" + kind); g.style.setProperty("--h", 240 + Math.round(gHash(p.id, 7) * 100));  // purple to rose: never reads as working blue, done green or needs-you amber
+  const ring = (half) => svgEl("path", { class: "pring", "stroke-width": r * 0.2, transform: `rotate(${tilt})`, d: `M ${-r * 1.75} 0 A ${r * 1.75} ${r * 0.45} 0 0 ${half} ${r * 1.75} 0` });
+  orb.append(svgEl("circle", { class: "halo", r: r + 9 }));
+  if (!rocky) orb.append(ring(1));  // the ring shows only while the item has an open tab (CSS: .live)
+  orb.append(svgEl("circle", { class: "body", r }),
+    svgEl("circle", { class: "tex", r, fill: `url(#gtex-${tex}${tex === "rock" ? "" : Math.floor(gHash(p.id, 8) * 3)})`, transform: `rotate(${tilt})` }),
+    svgEl("circle", { class: "shade", r, fill: "url(#gshade)" }));
+  if (kind === "ice") orb.append(svgEl("circle", { class: "atmo", r: r + 2 }));
+  if (!rocky) orb.append(ring(0));
   g.append(orb);
   const label = svgEl("text", { class: "plabel", y: r + 16, "text-anchor": "middle" });
   label.textContent = p.title.length > 30 ? p.title.slice(0, 29) + "…" : p.title;
@@ -1498,7 +1613,8 @@ function gPlanetEl(p) {
 function gStatusPatch(p) {
   const n = G.world && G.world.querySelector(`.gplanet[data-id="${p.id}"]`);
   if (!n) return;
-  n.setAttribute("class", `gplanet st-${p.status}${p.needs ? " needs" : ""}${p.dormant ? " dormant" : ""}${p.tabs.length ? " live" : ""}${G.hitIds && G.hitIds.has(p.id) ? " hit" : ""}${G.sys != null && G.pos[p.id] && G.pos[p.id].sys !== G.sys ? " away" : ""}`);
+  const kind = [...n.classList].find(c => c.startsWith("pk-"));
+  n.setAttribute("class", `gplanet ${kind} st-${p.status}${p.needs ? " needs" : ""}${p.dormant ? " dormant" : ""}${p.tabs.length ? " live" : ""}${G.hitIds && G.hitIds.has(p.id) ? " hit" : ""}${G.sys != null && G.pos[p.id] && G.pos[p.id].sys !== G.sys ? " away" : ""}`);
 }
 
 function gLinkPath(a, b) {
@@ -1514,19 +1630,47 @@ function gBuild() {
   const defs = svgEl("defs", {});
   const marker = svgEl("marker", { id: "garrow", viewBox: "0 0 10 10", refX: "9", refY: "5", markerWidth: "7", markerHeight: "7", orient: "auto-start-reverse" });
   marker.append(svgEl("path", { d: "M0,0 L10,5 L0,10 z", class: "garrowhead" }));
+  // Lighting: one shared highlight-and-shadow overlay makes every planet, sun and city read as a lit sphere; each goal sits in a faint coloured haze.
+  const grad = (tag, id, attrs, stops) => { const g = svgEl(tag, { id, ...attrs }); stops.forEach(([o, c, a]) => g.append(svgEl("stop", { offset: o, "stop-color": c, "stop-opacity": a }))); defs.append(g); };
+  grad("radialGradient", "gshade", { cx: "35%", cy: "30%", r: "75%" }, [["0", "#fff", .45], ["35%", "#fff", .06], ["70%", "#000", 0], ["100%", "#000", .55]]);
+  // Planet surfaces, drawn over the status colour. Gas: three band patterns. Rock: craters. Ice: frosted cap.
+  [[0.18, 0.31, 0.47, 0.6, 0.78], [0.12, 0.4, 0.55, 0.7, 0.86], [0.25, 0.36, 0.52, 0.66, 0.9]].forEach((bands, v) => {
+    const st = []; bands.forEach((b, i) => { const c = i % 2 ? "#fff" : "#000", o = i % 2 ? .16 : .2; st.push([b - .05, c, 0], [b, c, o], [b + .05, c, 0]); });
+    grad("linearGradient", "gtex-gas" + v, { x1: 0, y1: 0, x2: 0, y2: 1 }, st);
+  });
+  [0, 1, 2].forEach(v => grad("radialGradient", "gtex-ice" + v, { cx: "50%", cy: v === 1 ? "0%" : "100%", r: "60%" }, [["0", "#fff", .55], ["60%", "#e8f6ff", .12], ["100%", "#fff", 0]]));
+  const craters = svgEl("pattern", { id: "gtex-rock", patternContentUnits: "objectBoundingBox", width: 1, height: 1 });
+  [[.3, .35, .09], [.62, .28, .06], [.55, .62, .12], [.25, .7, .05], [.78, .55, .05], [.42, .85, .04]].forEach(([cx, cy, r]) => {
+    craters.append(svgEl("circle", { cx, cy, r, fill: "#000", "fill-opacity": .22 }), svgEl("circle", { cx: cx - r * .25, cy: cy - r * .25, r: r * .7, fill: "#fff", "fill-opacity": .07 }));
+  });
+  defs.append(craters);
+  // Stars: small goals are red dwarfs, mid goals yellow suns, big goals white-hot.
+  [["#ffd6cf", "#d9604c", "#6e1d12", "#1e0b08"], ["#fff4d6", "#f5c56b", "#8a5a1c", "#2a2416"], ["#ffffff", "#e6eeff", "#8aa6e0", "#1d2338"]].forEach(([a, b, c, d], i) => {
+    grad("radialGradient", "gsun" + i, { cx: "40%", cy: "35%", r: "70%" }, [["0", a, 1], ["30%", b, .95], ["75%", c, .7], ["100%", d, .9]]);
+    grad("radialGradient", "gcor" + i, {}, [["0", b, .5], ["40%", b, .12], ["100%", b, 0]]);
+  });
+  GNEB.forEach((c, i) => grad("radialGradient", "gneb" + i, {}, [["0", c, .22], ["55%", c, .08], ["100%", c, 0]]));
   defs.append(marker); svg.append(defs, world);
+  const neb = svgEl("g", { class: "nebulae" });
+  Object.entries(L.suns).forEach(([id, s], i) => { if (id) neb.append(svgEl("circle", { class: "nebula", "data-sys": id, cx: s.x, cy: s.y, r: s.reach * 1.35, fill: `url(#gneb${i % GNEB.length})` })); });
+  world.append(neb);
   // Suns and orbit rings
   Object.entries(L.suns).forEach(([id, s]) => {
     const g = svgEl("g", { class: "gsys", "data-sys": id });
     const radii = [...new Set(s.planets.map(p => Math.round(Math.hypot(G.pos[p.id].x - s.x, G.pos[p.id].y - s.y))))];
     radii.forEach(r => g.append(svgEl("circle", { class: "orbit", cx: s.x, cy: s.y, r })));
-    const sun = svgEl("circle", { class: "sun" + (id ? "" : " nogoal"), cx: s.x, cy: s.y, r: s.r });
+    const tier = s.n < 7 ? 0 : s.n < 14 ? 1 : 2;
+    const sun = svgEl("circle", { class: "sun" + (id ? "" : " nogoal"), cx: s.x, cy: s.y, r: s.r, style: id ? `fill:url(#gsun${tier});--sc:${["#c9584a", "#f5c56b", "#cfdcff"][tier]}` : "" });
+    if (id) g.append(svgEl("circle", { class: "corona", cx: s.x, cy: s.y, r: s.r * 2.3, fill: `url(#gcor${tier})` }));
+    if (s.belt) [-14, 0, 14].forEach((d, i) => g.append(svgEl("circle", { class: "belt b" + i, cx: s.x, cy: s.y, r: s.belt + d })));
     const flare = svgEl("circle", { class: "flare", cx: s.x, cy: s.y, r: s.r + 14 });  // pulses while anything in this goal needs you
     g.append(flare);
     const t = svgEl("text", { class: "slabel", x: s.x, y: s.y - s.reach, dy: "-0.9em", "text-anchor": "middle" }); t.textContent = s.title;
     const tt = svgEl("title", {}); tt.textContent = id ? "Click to zoom into this goal" : "Items the goal sorter hasn't placed yet. Use \"Sort into goals\" at the top left."; g.append(tt);
     const c = svgEl("text", { class: "scount", x: s.x, y: s.y - s.reach, dy: "0.4em", "text-anchor": "middle" });
-    g.append(sun, t, c);
+    g.append(sun);
+    if (id) g.append(svgEl("circle", { class: "shade", cx: s.x, cy: s.y, r: s.r, fill: "url(#gshade)" }));
+    g.append(t, c);
     g.onclick = e => { e.stopPropagation(); if (!G.moved) gGoSystem(id); };
     world.append(g);
   });
@@ -1574,7 +1718,8 @@ function gBuild() {
   svg.onclick = () => { if (G.moved) return; if (G.pinned) { G.pinned = null; gFocus(null); } };
   G.tip = el("div", "gtip"); G.tip.hidden = true;
   G.bubbles = el("div", "gbubbles");
-  wrap.append(svg, G.bubbles, gCrumbs(), gSearchBox(), gLegend(), gMinimap(), G.tip);
+  G.stars = el("canvas", "gstars");
+  wrap.append(G.stars, svg, G.bubbles, gCrumbs(), gSearchBox(), gLegend(), gMinimap(), G.tip);
   G.wrap = wrap; G.svg = svg; G.world = world;
   if (G.hits) gSearchPaint();  // a rebuild keeps the current search
 }
@@ -1583,7 +1728,8 @@ function gBuild() {
 function gMinimap() {
   const L = G.layout, box = el("div", "gmini"), svg = svgEl("svg", { viewBox: `0 0 ${L.w} ${L.h}`, preserveAspectRatio: "xMidYMid meet" });
   Object.values(L.suns).forEach(s => svg.append(svgEl("circle", { class: "msun", cx: s.x, cy: s.y, r: s.reach })));
-  gVisible().forEach(p => { const at = G.pos[p.id]; if (at) svg.append(svgEl("circle", { class: "mdot" + (p.needs ? " needs" : p.status === "working" ? " working" : ""), cx: at.x, cy: at.y, r: p.dormant ? 10 : 18 })); });
+  const px = Math.max(L.w / 182, L.h / 122);  // world units per minimap pixel
+  gVisible().forEach(p => { const at = G.pos[p.id]; if (at) svg.append(svgEl("circle", { class: "mdot" + (p.needs ? " needs" : p.status === "working" ? " working" : ""), cx: at.x, cy: at.y, r: px * (p.needs ? 4 : p.status === "working" ? 2.5 : p.dormant ? 1 : 1.6) })); });
   G.miniView = svgEl("rect", { class: "mview" });
   svg.append(G.miniView);
   box.append(svg);
@@ -1619,10 +1765,14 @@ function gSearchBox() {
   input.onkeydown = e => {
     e.stopPropagation();
     if (e.key === "Escape") { if (input.value) { input.value = ""; gSearch(""); } else input.blur(); }
-    else if (e.key === "Enter") { clearTimeout(G.searchT); if (input.value !== G.q) gSearch(input.value).then(() => gSearchStep(e.shiftKey ? -1 : 1)); else gSearchStep(e.shiftKey ? -1 : 1); }
+    else if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); gSearchMove(e.key === "ArrowDown" ? 1 : -1); }
+    else if (e.key === "Enter") { clearTimeout(G.searchT);
+      const open = () => { const sh = gSearchShown(); if (sh.length) gOpenPlanet(sh[Math.max(0, G.hitAt)].id); };
+      if (input.value !== G.q) gSearch(input.value).then(open); else open(); }
   };
   G.searchCount = el("span", "gscount");
-  box.append(input, G.searchCount);
+  G.searchList = el("div", "gslist"); G.searchList.hidden = true;
+  box.append(input, G.searchCount, G.searchList);
   G.searchInput = input;
   return box;
 }
@@ -1644,10 +1794,23 @@ function gSearchPaint() {
   G.svg.querySelectorAll(".gplanet").forEach(n => n.classList.toggle("hit", !!G.hitIds && G.hitIds.has(n.dataset.id)));
   const shown = gSearchShown(), hidden = (G.hits || []).length - shown.length;
   G.searchCount.textContent = G.searchErr ? G.searchErr : !G.hits ? "" : !G.hits.length ? "no matches"
-    : `${shown.length} item${shown.length === 1 ? "" : "s"}${hidden ? ` (+${hidden} dormant, hidden)` : ""} · Enter steps through`;
+    : `${shown.length} item${shown.length === 1 ? "" : "s"}${hidden ? ` (+${hidden} dormant, hidden)` : ""}`;
   const words = (G.q || "").toLowerCase().split(/\s+/).filter(Boolean);
   const re = words.length ? new RegExp("(" + words.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|") + ")", "ig") : null;
   const marked = text => { const s = el("span", "gbsnip"); text.split(re).forEach((part, n) => s.append(n % 2 ? el("mark", "", part) : document.createTextNode(part))); return s; };
+  G.searchList.hidden = !shown.length;
+  G.searchList.replaceChildren(...shown.map((h, n) => {
+    const p = G.data.planets.find(x => x.id === h.id), row = el("button", "gsrow" + (n === G.hitAt ? " sel" : ""));
+    const st = p.needs ? "needs you" : p.dormant ? "dormant" : LABEL[p.status] || "idle", sun = G.suns[G.pos[h.id].sys];
+    const top = el("div", "gsr-top");
+    top.append(el("b", "", p.title), el("span", "chip st-" + (p.needs ? "waiting" : p.status), st));
+    row.append(top, el("div", "gsr-goal", sun ? sun.title : ""));
+    if (h.field !== "name") { const line = el("div", "gsr-snip"); line.append(el("span", "gbfield", h.field + ": "), marked(h.snippet)); row.append(line); }
+    row.onclick = e => { e.stopPropagation(); G.hitAt = n; gOpenPlanet(h.id); };
+    row.onmouseenter = () => gFocus(h.id);
+    row.onmouseleave = () => gFocus(G.pinned || G.planet);
+    return row;
+  }));
   G.bubbles.replaceChildren(...shown.map((h, n) => {
     const p = G.data.planets.find(x => x.id === h.id), b = el("div", "gbubble");
     b.dataset.id = h.id; b.style.setProperty("--i", Math.min(n, 12));
@@ -1663,7 +1826,8 @@ function gSearchPaint() {
 // Bubbles are placed in rank order; one that would cover a better-ranked bubble is hidden (its planet keeps the orange ring and the hover card shows the match).
 function gBubblesPlace() {
   if (!G.bubbles || !G.bubbles.childNodes.length) return;
-  const placed = [];
+  const placed = [{ x: 0, y: 0, r: 540, b: 96 }];  // breadcrumb and search box
+  if (G.searchList && !G.searchList.hidden) placed.push({ x: 0, y: 0, r: 16 + G.searchList.offsetWidth + 8, b: 96 + G.searchList.offsetHeight });
   G.bubbles.childNodes.forEach(b => {
     const at = G.pos[b.dataset.id], p = G.data.planets.find(x => x.id === b.dataset.id);
     const r = Math.max(gRadius(p) * G.cam.k, 10), w = b.offsetWidth, h = b.offsetHeight;
@@ -1675,18 +1839,25 @@ function gBubblesPlace() {
     if (!clash) placed.push(box);
   });
 }
-function gSearchStep(dir) {
+// Arrow keys move through the results list: the chosen row lights its planet without moving the camera. Enter opens it.
+function gSearchMove(dir) {
   const shown = gSearchShown();
   if (!shown.length) return;
   G.hitAt = ((G.hitAt == null ? -1 : G.hitAt) + dir + shown.length) % shown.length;
-  gOpenPlanet(shown[G.hitAt].id);
+  G.searchList.querySelectorAll(".gsrow").forEach((r, i) => r.classList.toggle("sel", i === G.hitAt));
+  const row = G.searchList.children[G.hitAt]; if (row) row.scrollIntoView({ block: "nearest" });
+  gFocus(shown[G.hitAt].id);
 }
 
 function gCrumbs() {
   const c = el("div", "gcrumbs");
   const add = (text, fn, cur) => { const b = el(cur ? "span" : "button", cur ? "cur" : "", text); if (fn) b.onclick = fn; if (c.childNodes.length) c.append(el("span", "sep", "›")); c.append(b); };
   add("Galaxy", G.sys == null && !G.planet ? null : gGoGalaxy, G.sys == null && !G.planet);
-  if (G.sys != null) add(G.suns[G.sys] ? G.suns[G.sys].title : "", G.planet ? () => gGoSystem(G.sys) : null, !G.planet);
+  if (G.sys != null) {
+    add(G.suns[G.sys] ? G.suns[G.sys].title : "", G.planet ? () => gGoSystem(G.sys) : null, !G.planet);
+    const ps = G.data.planets.filter(p => G.pos[p.id] && G.pos[p.id].sys === G.sys), need = ps.filter(p => p.needs).length;
+    if (!G.planet) c.append(el("span", "gcount" + (need ? " alert" : ""), `${ps.filter(p => !p.dormant).length} active${need ? ` · ${need} need${need === 1 ? "s" : ""} you` : ""}`));
+  }
   if (G.planet) { const p = G.data.planets.find(x => x.id === G.planet); add(p ? p.title : "", null, true); }
   const loose = G.data.planets.filter(p => !G.suns[p.group] || p.group === "").length;
   if (loose && G.suns[""]) {
@@ -1699,7 +1870,8 @@ function gCrumbs() {
   }
   const needs = gNeedsOrder();
   if (needs.length) {
-    const b = el("button", "gnext", `Next that needs you (${needs.length})`);
+    const at = needs.findIndex(p => p.id === G.planet), nx = needs[(at + 1) % needs.length];
+    const b = el("button", "gnext", `Needs you: ${nx.title.length > 34 ? nx.title.slice(0, 33) + "…" : nx.title}${needs.length > 1 ? ` (+${needs.length - 1})` : ""}`);
     b.title = "Fly to the next item waiting on you (key n)"; b.onclick = gNextNeeds;
     c.append(b);
   }
@@ -1708,7 +1880,9 @@ function gCrumbs() {
   else if (dk) {
     const chip = el("span", "gdock");
     const b = el("button", "", "Send back"); b.title = `Return this tab to ${dk.ws_title || "its workspace"}`; b.onclick = gUndock;
-    chip.append(el("span", "", "Docked: " + dk.title), b);
+    const det = el("button", "", G.peekPanel ? "Hide details" : "Details"); det.title = "Show or hide the item panel while the session is docked";
+    det.onclick = () => { G.peekPanel = !G.peekPanel; render(last); };
+    chip.append(el("span", "", "Docked: " + dk.title), det, b);
     c.append(chip);
   }
   const fit = el("button", "gfit", "Fit"); fit.title = "Show the whole galaxy (key 0)"; fit.onclick = gGoGalaxy;
@@ -1730,7 +1904,7 @@ function gLegend() {
   shapes.innerHTML = `<svg width="300" height="22" viewBox="0 0 300 22"><circle cx="9" cy="11" r="8" class="sun"/><text x="22" y="15">goal</text>
     <circle cx="66" cy="11" r="6" class="lg-planet"/><text x="77" y="15">work item</text><rect x="146" y="5" width="11" height="11" rx="2.5" class="lg-city"/><text x="162" y="15">session</text>
     <polygon points="${gHex(225, 11, 7)}" class="lg-hub"/><text x="237" y="15">project</text></svg>`;
-  box.append(shapes, el("hr"));
+  box.append(shapes, el("div", "ghint", "Blue glow: an agent is working · amber: needs you · green: done · ringed: has an open tab · outer dotted belt: dormant"), el("hr"));
   [...GLINES, "project"].forEach(k => {
     const lab = el("label", "k-" + k), cb = el("input");
     cb.type = "checkbox"; cb.checked = G.kinds[k];
@@ -1769,12 +1943,13 @@ function gFocus(id) {
   });
   svg.querySelectorAll(".ghub").forEach(h => { h.classList.toggle("near", hubsOn.has(h.dataset.hub)); h.classList.toggle("hidden", !(G.kinds.project || hubsOn.has(h.dataset.hub))); });
   svg.querySelectorAll(".gplanet").forEach(n => { n.classList.toggle("near", near.has(n.dataset.id)); n.classList.toggle("pin", n.dataset.id === id); });
-  svg.classList.toggle("incity", !!G.planet && !!G.detail);
+  svg.classList.toggle("incity", !!G.planet && !!G.detail && !G.single);
   svg.classList.toggle("insys", G.sys != null);
+  requestAnimationFrame(gLabelCull);
   if (G.awaySys !== G.sys) {  // inside a goal, the other goals fade back
     G.awaySys = G.sys;
     svg.querySelectorAll(".gplanet").forEach(n => n.classList.toggle("away", G.sys != null && G.pos[n.dataset.id].sys !== G.sys));
-    svg.querySelectorAll(".gsys").forEach(n => n.classList.toggle("away", G.sys != null && n.dataset.sys !== G.sys));
+    svg.querySelectorAll(".gsys, .nebula").forEach(n => n.classList.toggle("away", G.sys != null && n.dataset.sys !== G.sys));
     svg.querySelectorAll(".glink").forEach(n => n.classList.toggle("away", G.sys != null && G.pos[n.dataset.a].sys !== G.sys && G.pos[n.dataset.b].sys !== G.sys));
   }
 }
@@ -1810,14 +1985,19 @@ async function gOpenPlanet(id) {
   G.planet = id; G.pinned = id; G.sys = G.pos[id].sys;
   G.panel.hidden = false;
   G.panel.replaceChildren(el("div", "tl-prompt", "loading…"));
+  const fromSys = G.sys;
   G.detail = null; G.cityLayer.replaceChildren();
+  G.single = p.sessions <= 1;  // one session: the panel says it all, so the camera stays at goal level
   gRefreshCrumbs(); gFocus(id);
-  gFitPlanet(id, gRadius(p) + 120);
+  if (!G.single) gFitPlanet(id, gRadius(p) + 120);
+  else { const W = G.wrap.clientWidth - G.panel.offsetWidth, H = G.wrap.clientHeight, at = G.pos[id];
+    const sx = G.cam.x + at.x * G.cam.k, sy = G.cam.y + at.y * G.cam.k;
+    if (fromSys !== G.sys || G.cam.k < 0.2 || sx < 40 || sx > W - 40 || sy < 80 || sy > H - 40) gFitSystem(G.sys); }
   try { G.detail = await (await fetch("/api/planet?id=" + encodeURIComponent(id))).json(); }
   catch (e) { G.panel.replaceChildren(el("div", "err", "Could not load this item: " + e.message)); return; }
   if (G.planet !== id) return;
   gRenderPlanet();
-  gDrawCities();
+  if (!G.single) gDrawCities();
   gFocus(id);
 }
 function gClosePlanet(quiet) {
@@ -1853,7 +2033,7 @@ function gDrawCities() {
   S.forEach((s, i) => {
     const c = place[s.transcript], z = 15;
     const g = svgEl("g", { class: `gcity st-${s.status}${s.live ? " live" : ""}`, transform: `translate(${c.x},${c.y})`, style: `--i:${i}` });
-    g.append(svgEl("rect", { class: "halo", x: -z / 2 - 6, y: -z / 2 - 6, width: z + 12, height: z + 12, rx: 6 }), svgEl("rect", { class: "body", x: -z / 2, y: -z / 2, width: z, height: z, rx: 3.5 }));
+    g.append(svgEl("rect", { class: "halo", x: -z / 2 - 6, y: -z / 2 - 6, width: z + 12, height: z + 12, rx: 6 }), svgEl("rect", { class: "body", x: -z / 2, y: -z / 2, width: z, height: z, rx: 3.5 }), svgEl("rect", { class: "shade", x: -z / 2, y: -z / 2, width: z, height: z, rx: 3.5, fill: "url(#gshade)" }));
     const below = Math.sin(c.a) > -0.3;
     const t = svgEl("text", { class: "clabel", "text-anchor": Math.abs(Math.cos(c.a)) < 0.3 ? "middle" : Math.cos(c.a) > 0 ? "start" : "end",
       x: Math.abs(Math.cos(c.a)) < 0.3 ? 0 : Math.cos(c.a) > 0 ? z : -z, y: below ? z + 8 : -z });
@@ -1989,7 +2169,7 @@ function gRenderPlanet() {
   if (live.length) {
     const target = live.find(s => s.status === "waiting") || live[live.length - 1];
     const isDocked = last && live.some(s => s.live === last.docked);
-    const b = el("button", "add", isDocked ? "Send back" : "Show beside map");
+    const b = el("button", "add" + (isDocked ? "" : " primary"), isDocked ? "Send back" : "Show beside map");
     b.title = isDocked ? "Return the docked tab to its workspace" : "Open its tab in a pane to the right of the map";
     b.onclick = () => (isDocked ? gUndock() : gFocusTab(target));
     acts.append(b);
@@ -1997,7 +2177,7 @@ function gRenderPlanet() {
     go.onclick = () => fetch("/api/focus", { method: "POST", body: JSON.stringify({ workspace: target.workspace, surface: target.live }) });
     acts.append(go);
   }
-  else if (d.state !== "done") { const b = el("button", "add", "Resume beside map"); b.title = "Reopen its latest session and show it beside the map";
+  else if (d.state !== "done") { const b = el("button", "add primary", "Resume beside map"); b.title = "Reopen its latest session and show it beside the map";
     b.onclick = () => { b.disabled = true; b.textContent = "Reopening…"; gResumeDock(null, d.title); }; acts.append(b); }
   if (live.length && d.state === "active") { const b = el("button", "add", "Park"); b.title = "Write a note, close its tabs"; b.onclick = async () => { b.disabled = true; b.textContent = "Parking…";
     try { const r = await workPost("park", { id: d.id }); b.textContent = "Parked. Next: " + r.next; tick(); } catch (e) { b.textContent = "Failed: " + e.message; } }; acts.append(b); }
@@ -2113,7 +2293,14 @@ function renderGalaxy(state) {
   G.data.planets.forEach(gStatusPatch);
   gSunPatch();
   gRefreshCrumbs();
-  if (G.planet && G.detail && !G.cityLayer.childNodes.length) gDrawCities();
+  if (G.planet && G.detail && !G.single && !G.cityLayer.childNodes.length) gDrawCities();
+  // While a session is docked beside the map, the item panel tucks away so the map gets the room; it comes back on Send back.
+  if (!(last && last.docked)) G.peekPanel = false;
+  const tucked = !!(last && last.docked && G.planet && !G.peekPanel);
+  if (tucked !== !!G.tucked) {
+    G.tucked = tucked; G.panel.classList.toggle("tucked", tucked);
+    if (G.planet && !G.single && G.lastReach) gFitPlanet(G.planet, G.lastReach); else gMiniPlace();
+  }
   gFocus(G.pinned || G.planet);
 }
 
@@ -2155,6 +2342,8 @@ let view = "work";
 view = "galaxy";
 const viewBtn = document.getElementById("viewBtn");
 let lastFlat = view === "galaxy" ? "work" : view;  // the view g returns to
+const hintEl = document.querySelector("header > .hint"), flatHint = hintEl.textContent;
+const GHINT = "click a goal or planet to zoom in · n next that needs you · / search · Esc up a level · 0 whole galaxy · pinch or ⌘-scroll to zoom · drag to pan · w work view";
 function setView(v) {
   if (v !== "galaxy") lastFlat = v;
   view = v; remember("ow.view", v);
@@ -2162,11 +2351,13 @@ function setView(v) {
   galaxyBtn.classList.toggle("on", v === "galaxy");
   if (v !== "galaxy") { map.classList.remove("gmode"); G.panel.hidden = true; G.wrap = null; }
   else if (G.planet) G.panel.hidden = false;
+  hintEl.textContent = v === "galaxy" ? GHINT : flatHint;
   render(last);
 }
 const galaxyBtn = document.getElementById("galaxyBtn");
 viewBtn.onclick = () => setView(view === "work" ? "tabs" : "work");
 galaxyBtn.onclick = () => setView(view === "galaxy" ? lastFlat : "galaxy");
+hintEl.textContent = view === "galaxy" ? GHINT : flatHint;
 viewBtn.textContent = view === "work" ? "Tabs view" : "Work view";
 galaxyBtn.classList.toggle("on", view === "galaxy");
 document.addEventListener("keydown", e => { if (e.key === "g" && !typing(e) && ib.hidden && !document.getElementById("peek")) setView(view === "galaxy" ? lastFlat : "galaxy"); });
