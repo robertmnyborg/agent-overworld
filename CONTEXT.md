@@ -312,5 +312,5 @@ Review screenshots: `.shots/review-*.png`; after: `.shots/fix-*.png`.
 
 ## 2026-11-25 (capture prompt: announce tab moves)
 - `server.py` capture template, step 2: the agent now opens its reply with "Moved: <old workspace / tab> -> <new workspace / tab>. Same conversation." when it moved or renamed the tab, so an unexpected notification explains itself. Same rule added to `~/CLAUDE.md` Communication.
-- Waits on: commit (uncommitted) and a server restart to load the new template.
+- Merged (PR #6) and live server restarted on it (pid 39499), 2026-11-25.
 - Next: confirm the next capture that moves a tab opens with the Moved line.
