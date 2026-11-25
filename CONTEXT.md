@@ -309,3 +309,8 @@ Review screenshots: `.shots/review-*.png`; after: `.shots/fix-*.png`.
 10. One-session items (47 of 63 active) open the panel without flying in or drawing cities; camera only moves if the planet is off-screen or under the panel. "Show/Resume beside map" is the filled primary button. The panel now starts below the header.
 11. Systems pack to the real viewport shape (clamped 1.2-2.6); orbit gap growth capped at 64. Galaxy 6365x5126 -> 6394x4090, fit zoom 0.128 -> 0.145.
 12. Idle hues limited to 240-340 (purple to rose). A ring now means "has an open tab" (ring shown via `.live`); surface type (gas/rock/ice) stays decorative. Legend explains colours and rings.
+
+## 2026-11-25 (capture prompt: announce tab moves)
+- `server.py` capture template, step 2: the agent now opens its reply with "Moved: <old workspace / tab> -> <new workspace / tab>. Same conversation." when it moved or renamed the tab, so an unexpected notification explains itself. Same rule added to `~/CLAUDE.md` Communication.
+- Waits on: commit (uncommitted) and a server restart to load the new template.
+- Next: confirm the next capture that moves a tab opens with the Moved line.
