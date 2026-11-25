@@ -1306,6 +1306,8 @@ Robert sent this with the capture hotkey:
    cmux move-surface --surface "$CMUX_SURFACE_ID" --workspace "<workspace ref>" --focus false
    cmux rename-tab --surface "$CMUX_SURFACE_ID" "<2-4 word title>"
    Never rename a workspace or group.
+   If the tab moved or was renamed, the first line of your reply says so:
+   "Moved: <old workspace> / <old tab title> -> <new workspace> / <new tab title>. Same conversation."
 3. {sender}
 4. Do what the note asks. If it asks for nothing specific, summarize the source in 3 lines and say what you would do next.
    Never post to Slack, email, or Jira without Robert's yes for that post.
