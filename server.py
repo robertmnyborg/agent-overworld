@@ -6,7 +6,7 @@ Started by autostart.zsh from the first cmux shell (cmux's socket only accepts p
 While cmux is running, keeps a pinned "Overworld" workspace (browser pane on this server) in slot 1 (⌘1),
 and a pinned, ungrouped "Scratch" workspace in slot 2 for one-off sessions not yet worth their own workspace.
 """
-import hashlib, json, os, re, shlex, subprocess, threading, time, urllib.error, urllib.request
+import hashlib, json, os, re, shlex, subprocess, threading, time, urllib.error, urllib.parse, urllib.request
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -130,7 +130,105 @@ def keep_came_from():
         time.sleep(1)
 
 
+DOCK = Path.home() / ".overworld" / "dock.json"  # the session shown beside the map: its surface and where it lives when not docked
+_dock_lock = threading.Lock()
+DOCK_GRACE = 10  # seconds a fresh dock record is trusted even if the tree doesn't show the tab yet
+
+
+def docked():
+    return json.loads(DOCK.read_text()) if DOCK.exists() else None
+
+
+def _where(surface):
+    """(workspace, pane, index in pane) of a surface, from the full tree; None if it no longer exists."""
+    tree = json.loads(cmux("--json", "--id-format", "both", "tree", "--all"))
+    for window in tree["windows"]:
+        for ws in window["workspaces"]:
+            for pane in ws["panes"]:
+                for n, sf in enumerate(pane["surfaces"]):
+                    if sf["id"] == surface:
+                        return ws, pane, n
+    return None
+
+
+def _settle(surface, inside_overworld):
+    """cmux applies a move a moment after it answers OK: wait (up to 3s) until the tree shows the tab where it should be."""
+    for _ in range(30):
+        at = _where(surface)
+        if at and (at[0]["title"] == "Overworld") == inside_overworld:
+            return True
+        time.sleep(0.1)
+    return False
+
+
+def _ws_by_title(title):
+    return next((w for w in json.loads(cmux("--json", "list-workspaces"))["workspaces"] if w["title"] == title), None)
+
+
+def dock(surface):
+    """Show a session's real tab in a pane right of the map, in the Overworld workspace. A session already docked goes home first."""
+    with _dock_lock:
+        d = docked()
+        ow = _ws_by_title("Overworld")
+        if not ow:
+            raise RuntimeError("no Overworld workspace")
+        if d and d["surface"] == surface:
+            cmux("focus-panel", "--panel", surface, "--workspace", ow["ref"])
+            return {"docked": surface}
+        if d:
+            _undock(d)
+        at = _where(surface)
+        if not at:
+            raise RuntimeError("that tab no longer exists")
+        ws, pane, n = at
+        if ws["title"] == "Overworld":
+            raise RuntimeError("that tab is already in the Overworld workspace")
+        checked_cmux("move-surface", "--surface", surface, "--workspace", ow["ref"], "--focus", "false")
+        _settle(surface, True)
+        checked_cmux("split-off", "--surface", surface, "right", "--workspace", ow["ref"], "--focus", "false")
+        tmp = DOCK.with_suffix(".tmp")  # atomic: the 3s map refresh reads this file concurrently
+        tmp.write_text(json.dumps({"surface": surface, "home_ws": ws["id"], "home_ws_title": ws["title"], "home_pane": pane["id"], "home_index": n, "at": time.time()}))
+        tmp.replace(DOCK)
+        print(f"{time.strftime('%H:%M:%S')} docked {at[1]['surfaces'][n]['title']!r} from {ws['title']}", flush=True)
+        cmux("focus-panel", "--panel", surface, "--workspace", ow["ref"])
+        return {"docked": surface, "home": ws["title"]}
+
+
+def _undock(d):
+    """Move the docked tab back to its pane (same position) or, if that pane is gone, its workspace; Scratch if that is gone too."""
+    DOCK.unlink(missing_ok=True)
+    at = _where(d["surface"])
+    if not at or at[0]["title"] != "Overworld":
+        return None  # closed, or already moved somewhere by hand
+    home = _where_pane(d["home_pane"])
+    if home:
+        checked_cmux("move-surface", "--surface", d["surface"], "--pane", d["home_pane"], "--index", str(d["home_index"]), "--focus", "false")
+        _settle(d["surface"], False)
+        print(f"{time.strftime('%H:%M:%S')} sent back {d['surface'][:8]} to {d['home_ws_title']}", flush=True)
+        return d["home_ws_title"]
+    ws = next((w for w in json.loads(cmux("--json", "list-workspaces"))["workspaces"] if w["id"] == d["home_ws"]), None) or _ws_by_title(SCRATCH)
+    checked_cmux("move-surface", "--surface", d["surface"], "--workspace", ws["ref"], "--focus", "false")
+    _settle(d["surface"], False)
+    print(f"{time.strftime('%H:%M:%S')} sent back {d['surface'][:8]} to {ws['title']}", flush=True)
+    return ws["title"]
+
+
+def _where_pane(pane_id):
+    tree = json.loads(cmux("--json", "--id-format", "both", "tree", "--all"))
+    return any(p["id"] == pane_id for w in tree["windows"] for ws in w["workspaces"] for p in ws["panes"])
+
+
+def undock():
+    with _dock_lock:
+        d = docked()
+        return {"home": _undock(d) if d else None}
+
+
 def focus(workspace, surface):
+    d = docked()
+    if d and d["surface"] == surface:  # a docked tab lives in the Overworld workspace now
+        ow = _ws_by_title("Overworld")
+        workspace = ow["ref"] if ow else workspace
     cmux("select-workspace", "--workspace", workspace)
     cmux("focus-panel", "--panel", surface, "--workspace", workspace)
 
@@ -1120,6 +1218,7 @@ def status(sess, unread_title, last_event):
 
 
 def state():
+    dk = docked()  # read before the tree: the dock record is written after the move, so this tree must already show it docked
     raw = cmux("--json", "--id-format", "both", "tree", "--all")
     if not raw.strip():
         return {"regions": [], "edges": [], "at": time.time(), "error": "cmux is not running"}
@@ -1130,12 +1229,28 @@ def state():
     group_of = {ref: g["ref"] for g in groups for ref in g["member_workspace_refs"]}
     anchors = {g["anchor_workspace_ref"] for g in groups if g["anchor_workspace_is_generated"]}  # empty header workspaces cmux made
     regions = []
+    home = None  # the docked tab, shown under the workspace it came from
+    for window in tree["windows"]:
+        for ws in window["workspaces"]:
+            if ws["title"] == "Overworld" and dk:
+                home = next(((sf, pane, ws) for pane in ws["panes"] for sf in pane["surfaces"] if sf["id"] == dk["surface"]), None)
+    if dk and not home and time.time() - dk["at"] > DOCK_GRACE:
+        if _dock_lock.acquire(blocking=False):  # mid-dock the tab is briefly elsewhere; only clear when no dock is running
+            try:
+                if docked() == dk:
+                    DOCK.unlink(missing_ok=True)  # the docked tab was closed or moved away by hand
+            finally:
+                _dock_lock.release()
+        dk = None
     for window in tree["windows"]:
         for ws in window["workspaces"]:
             if ws["title"] == "Overworld" or ws["ref"] in anchors:
                 continue
+            panes = ws["panes"]
+            if home and ws["id"] == dk["home_ws"]:
+                panes = panes + [{**home[1], "surfaces": [home[0]], "docked": True}]
             sessions = []
-            for pane in ws["panes"]:
+            for pane in panes:
                 for sf in pane["surfaces"]:
                     if sf["type"] != "terminal":
                         continue
@@ -1155,14 +1270,15 @@ def state():
                                   "action": cached_action(sess.get("full", "")) if sess else None, "subagents": lane, "subagents_more": more,
                                   "agent": sess["agent"] if sess else None,
                                   "cwd": sess["cwd"] if sess else None, "transcript": sess.get("transcript") if sess else None,
-                                  "ws_ref": ws["ref"],
+                                  "ws_ref": ws["ref"], "ws_title": ws["title"],
                                   "updated": sess["updated"] if sess else None,
+                                  "docked": bool(pane.get("docked")),
                                   "here": sf.get("selected_in_pane") and pane.get("focused") and ws.get("selected")})
             if sessions:
                 regions.append({"id": ws["id"], "title": ws["title"], "group": group_of.get(ws["ref"]), "sessions": sessions,
                             "scratch": ws["title"] == SCRATCH})
     return {"regions": regions, "groups": [{"id": g["ref"], "name": g["name"]} for g in groups], "edges": edges, "at": time.time(),
-            "came_from": _came["from"]}
+            "came_from": _came["from"], "docked": dk["surface"] if dk else None}
 
 
 CAPTURES = Path.home() / ".overworld" / "captures"  # one brief per new capture; the session reads it as its first prompt
@@ -1550,12 +1666,14 @@ def park(item_id):
     return {"note": out["note"], "next": out["next"], "closed": closed}
 
 
-def resume(item_id, prompt=""):
-    """Reopen the item's most recent Claude session in its last workspace (Scratch if that's gone), in its own cwd."""
+def resume(item_id, prompt="", transcript=None):
+    """Reopen one of the item's Claude sessions (the most recent unless `transcript` names one) in its last workspace (Scratch if that's gone), in its own cwd."""
     with _work_lock:
         item = load_work()["items"][item_id]
     metas = sorted(((tr, m) for tr, m in item.get("meta", {}).items() if m["agent"] == "claude" and Path(tr).is_file()),
                    key=lambda x: x[1]["seen"], reverse=True)
+    if transcript:
+        metas = [x for x in metas if x[0] == transcript]
     if not metas:
         raise RuntimeError("no Claude session to resume on this item")
     tr, m = metas[0]
@@ -1813,6 +1931,261 @@ def redirect_capture(cid, to):
     return row
 
 
+# ---------- Galaxy: goals = systems, work items = planets, sessions = the planet's history. ----------
+# Links between items are inferred from transcripts (shared files, repos, Slack threads, spinoff briefs, people); nothing new is recorded.
+FACTS = Path.home() / ".overworld" / "facts.json"  # transcript -> facts, keyed by mtime so a restart doesn't re-read 500 MB
+DORMANT_DAYS = 5  # an item with no session activity for this long and no live tab needing anything reads as dormant
+HOME = str(Path.home())
+NOISE_PATHS = ("/tmp/", "/private/tmp/", "/private/var/", f"{HOME}/.claude/projects/", f"{HOME}/.overworld/captures/")
+GENERIC_FILE_ITEMS = 6  # a file touched by more items than this (a global CLAUDE.md, MEMORY.md) links nothing
+PR_LINK = re.compile(r"https://github\.com/[\w.-]+/[\w.-]+/pull/\d+")
+EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
+_facts_lock = threading.Lock()
+_facts = None
+_git_root_cache = {}
+
+
+def project_of(path):
+    """Project folder a path belongs to: its git root, else the ~/Projects/<name> folder (every one keeps a CONTEXT.md). None for home."""
+    root = git_root(path)
+    if root:
+        return root
+    rel = Path(path).parts[len(Path(HOME).parts):]
+    return f"{HOME}/Projects/{rel[1]}" if len(rel) >= 2 and rel[0] == "Projects" else None
+
+
+_main_repo_cache = {}
+
+
+def main_repo(root):
+    """A worktree (extra branch checkout, e.g. parrots-nest-QUEST-477) counts as its main repo. A removed one is matched by name."""
+    if root not in _main_repo_cache:
+        dotgit, main = Path(root) / ".git", root
+        if dotgit.is_file():
+            m = re.match(r"gitdir:\s*(.+?)/\.git/worktrees/", dotgit.read_text())
+            main = m.group(1) if m else root
+        elif not dotgit.exists():
+            base = re.sub(r"-[A-Z]+-\d+$", "", root)
+            main = base if base != root and (Path(base) / ".git").is_dir() else root
+        _main_repo_cache[root] = main
+    return _main_repo_cache[root]
+
+
+def git_root(path):
+    """Nearest folder holding .git above path; None for home itself or outside any repo."""
+    p = Path(path)
+    for d in [p, *p.parents]:
+        key = str(d)
+        if key in _git_root_cache:
+            return _git_root_cache[key]
+        if (d / ".git").exists():
+            root = None if key == HOME else key
+            _git_root_cache[key] = root
+            return root
+        if key in (HOME, "/"):
+            break
+    _git_root_cache[str(p)] = None
+    return None
+
+
+TAG_BLOCK = re.compile(r"<(system-reminder|command-[\w-]+|local-command-[\w-]+)>.*?</\1>", re.S)
+
+
+def transcript_facts(path):
+    """One pass over a transcript: time span, prompt times, cwd, files edited, repos, Slack threads, PRs, handoff briefs, sub-agent count."""
+    first = lastt = None
+    prompts, texts, files, cwds, threads, prs, briefs_in = [], [], set(), set(), set(), set(), set()
+    with open(path, "rb") as f:
+        for raw in f:
+            if b'"timestamp"' not in raw:
+                continue
+            try:
+                e = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+            ts = e.get("timestamp")
+            if not ts or e.get("type") not in ("user", "assistant"):
+                continue
+            t = _epoch(ts)
+            first = first or t
+            lastt = t
+            if e.get("cwd"):
+                cwds.add(e["cwd"])
+            if e["type"] == "user" and _is_prompt(e):
+                text = _user_text(e)
+                prompts.append(t)
+                clean = " ".join(TAG_BLOCK.sub(" ", text).split())
+                if clean:
+                    texts.append(clean[:600])
+                for m in SLACK_LINK.finditer(text):
+                    k = slack_thread(m.group(0))
+                    if k:
+                        threads.add(k)
+                briefs_in.update(re.findall(r"/\.overworld/handoffs/[\w.-]+\.md", text))
+            elif e["type"] == "assistant":
+                for b in _blocks(e):
+                    if b.get("type") == "text":
+                        prs.update(PR_LINK.findall(b.get("text", "")))
+                    elif b.get("type") == "tool_use" and b.get("name") in EDIT_TOOLS:
+                        fp = (b.get("input") or {}).get("file_path") or (b.get("input") or {}).get("notebook_path")
+                        if fp:
+                            files.add(fp)
+    sub = Path(path).with_suffix("") / "subagents"
+    repos = {r for r in (project_of(c) for c in cwds | {str(Path(f).parent) for f in files if not f.startswith(NOISE_PATHS)}) if r}
+    return {"first": first, "last": lastt, "prompts": prompts[-400:], "texts": texts[-300:], "cwd": sorted(cwds)[:3],
+            "files": sorted(files), "repos": sorted(repos), "threads": sorted(threads), "prs": sorted(prs),
+            "briefs_out": sorted(f.split("/.overworld")[1] for f in files if "/.overworld/handoffs/" in f),
+            "briefs_in": sorted(b[len("/.overworld"):] for b in briefs_in),
+            "subagents": len(list(sub.glob("agent-*.jsonl"))) if sub.is_dir() else 0}
+
+
+def facts_for(paths):
+    """Facts for each transcript, re-read only when its mtime changed. Missing transcripts are left out."""
+    global _facts
+    with _facts_lock:
+        if _facts is None:
+            _facts = json.loads(FACTS.read_text()) if FACTS.exists() else {}
+        out, changed = {}, False
+        for p in paths:
+            try:
+                mt = os.path.getmtime(p)
+            except OSError:
+                continue
+            cached = _facts.get(p)
+            if not cached or cached["mtime"] != mt or "texts" not in cached:  # "texts" arrived later: re-read older entries once
+                cached = {"mtime": mt, **transcript_facts(p)}
+                _facts[p], changed = cached, True
+            out[p] = cached
+        if changed:
+            tmp = FACTS.with_suffix(".tmp")
+            tmp.write_text(json.dumps(_facts))
+            tmp.replace(FACTS)
+        return out
+
+
+def _shared(sets_by_item, kind, generic=None):
+    """Pairs of items sharing a value in their sets -> link rows. Values held by more than `generic` items are ignored."""
+    holders = {}
+    for iid, vals in sets_by_item.items():
+        for v in vals:
+            holders.setdefault(v, []).append(iid)
+    pairs = {}
+    for v, ids in holders.items():
+        if len(ids) < 2 or (generic and len(ids) > generic):
+            continue
+        for a in range(len(ids)):
+            for b in range(a + 1, len(ids)):
+                pairs.setdefault(tuple(sorted((ids[a], ids[b]))), []).append(v)
+    return [{"a": a, "b": b, "kind": kind, "via": sorted(vs)} for (a, b), vs in pairs.items()]
+
+
+def galaxy(st):
+    """Systems (goals), planets (items) with derived dormant flag, and inferred links between items."""
+    w = load_work()
+    view = {i["id"]: i for i in work_view(st)["items"]} if st["regions"] else {}
+    facts = facts_for([tr for i in w["items"].values() for tr in i["sessions"]])
+    now, planets = time.time(), []
+    files, repos, threads, people, out_b, in_b = {}, {}, {}, {}, {}, {}
+    for i in w["items"].values():
+        fs = [facts[tr] for tr in i["sessions"] if tr in facts]
+        v = view.get(i["id"], {})
+        last_active = max([f["last"] or 0 for f in fs] + [i.get("updated", 0)])
+        live_need = v.get("status") in ("waiting", "working")
+        dormant = i["state"] == "active" and not live_need and now - last_active > DORMANT_DAYS * 86400
+        iid = i["id"]
+        files[iid] = {f for x in fs for f in x["files"] if not f.startswith(NOISE_PATHS) and "/.overworld/" not in f}
+        repos[iid] = {main_repo(r) for x in fs for r in x["repos"]}
+        threads[iid] = set(i.get("sources", [])) | {t for x in fs for t in x["threads"]}
+        people[iid] = {p.split()[0].lower() for p in i.get("people", []) if p}
+        out_b[iid] = {b for x in fs for b in x["briefs_out"]}
+        in_b[iid] = {b for x in fs for b in x["briefs_in"]}
+        planets.append({"id": iid, "title": i["title"], "goal": i.get("goal", ""), "group": i.get("group", ""), "state": i["state"],
+                        "dormant": dormant, "last_active": last_active, "status": v.get("status", "none"), "needs": v.get("needs", False),
+                        "next": v.get("next", i.get("next", "")), "waits_on": i.get("waits_on", ""), "people": i.get("people", []),
+                        "tabs": v.get("tabs", []), "sessions": len(i["sessions"]), "repos": sorted(repos[iid]),
+                        "prs": len({p for x in fs for p in x["prs"]}), "files": len(files[iid]), "threads": len(threads[iid])})
+    links = (_shared(files, "file", GENERIC_FILE_ITEMS) + _shared(threads, "thread") +
+             _shared(repos, "project", GENERIC_FILE_ITEMS * 2) + _shared(people, "person", GENERIC_FILE_ITEMS))
+    for a, briefs in out_b.items():  # spinoff: item a wrote a handoff brief that a session of item b was started on
+        for b, got in in_b.items():
+            via = sorted(briefs & got)
+            if a != b and via:
+                links.append({"a": a, "b": b, "kind": "spinoff", "via": [Path(x).stem for x in via]})
+    groups = sorted(w.get("groups", {}).values(), key=lambda g: g.get("order", 0))
+    return {"systems": [{"id": g["id"], "title": g["title"]} for g in groups], "planets": planets, "links": links,
+            "dormant_days": DORMANT_DAYS, "at": now}
+
+
+def planet(item_id, st):
+    """One item's history: each session's span, prompt times, spinoff parent within the item, sub-agents, files, PRs, threads."""
+    w = load_work()
+    i = w["items"].get(item_id)
+    if not i:
+        return {"error": "no such item"}
+    facts = facts_for(i["sessions"])
+    live = live_tabs(st) if st["regions"] else {}
+    wrote = {b: tr for tr in i["sessions"] if tr in facts for b in facts[tr]["briefs_out"]}
+    sessions = []
+    for tr in i["sessions"]:
+        f, m = facts.get(tr), i.get("meta", {}).get(tr, {})
+        if not f:
+            continue
+        t = live.get(tr)
+        parent = next((wrote[b] for b in f["briefs_in"] if b in wrote and wrote[b] != tr), None)
+        sessions.append({"transcript": tr, "title": (t or {}).get("title") or m.get("title") or Path(tr).stem[:8],
+                         "first": f["first"], "last": f["last"], "prompts": f["prompts"], "parent": parent,
+                         "brief": next((Path(b).stem for b in f["briefs_in"]), None), "subagents": f["subagents"],
+                         "live": t["id"] if t else None, "workspace": t["workspace"] if t else None,
+                         "status": t["status"] if t else "closed", "where": m.get("workspace_title", ""), "agent": m.get("agent", "claude")})
+    sessions.sort(key=lambda s: s["first"] or 0)
+    fs = [facts[tr] for tr in i["sessions"] if tr in facts]
+    return {"id": item_id, "title": i["title"], "goal": i.get("goal", ""), "note": i.get("note", ""), "next": i.get("next", ""),
+            "waits_on": i.get("waits_on", ""), "people": i.get("people", []), "state": i["state"], "sessions": sessions,
+            "files": sorted({f for x in fs for f in x["files"] if not f.startswith(NOISE_PATHS)}),
+            "repos": sorted({main_repo(r) for x in fs for r in x["repos"]}), "prs": sorted({p for x in fs for p in x["prs"]}),
+            "threads": sorted(set(i.get("sources", [])) | {t for x in fs for t in x["threads"]})}
+
+
+def _snip(text, words, width=110):
+    """The part of text around the first query word, with ellipses where it was cut."""
+    low = text.lower()
+    at = min((low.find(w) for w in words if w in low), default=0)
+    a = max(0, at - width // 3)
+    if a:
+        a = text.find(" ", a, at) + 1 or a  # start on a word boundary
+    b = min(len(text), a + width)
+    if b < len(text):
+        b = text.rfind(" ", a, b) if text.rfind(" ", a, b) > at else b
+    return ("…" if a else "") + text[a:b].strip() + ("…" if b < len(text) else "")
+
+
+def search(q):
+    """Items whose name, notes, repos, files, threads, people or prompts contain every word of q. Each hit carries where it matched and a snippet."""
+    words = [w for w in q.lower().split() if w]
+    if not words:
+        return {"q": q, "hits": []}
+    w = load_work()
+    facts = facts_for([tr for i in w["items"].values() for tr in i["sessions"]])
+    hits = []
+    for i in w["items"].values():
+        fs = [facts[tr] for tr in i["sessions"] if tr in facts]
+        fields = [("name", i["title"]), ("goal", i.get("goal", "")), ("next", i.get("next", "")), ("note", i.get("note", "")),
+                  ("waits on", i.get("waits_on", "")), ("people", ", ".join(i.get("people", [])))]
+        fields += [("project", r) for r in sorted({main_repo(r) for x in fs for r in x["repos"]})]
+        fields += [("file", f) for f in sorted({f for x in fs for f in x["files"] if not f.startswith(NOISE_PATHS)})]
+        fields += [("prompt", t) for x in sorted(fs, key=lambda x: -(x["last"] or 0)) for t in reversed(x.get("texts", []))]
+        fields = [(k, v) for k, v in fields if v]
+        blob = " ".join(v.lower() for _, v in fields)
+        if not all(x in blob for x in words):
+            continue
+        # Best snippet: the first field holding the most query words (fields are ordered name first, newest prompt first)
+        k, v = max(fields, key=lambda f: sum(x in f[1].lower() for x in words))
+        n = sum(blob.count(x) for x in words)
+        hits.append({"id": i["id"], "field": k, "snippet": v if k == "name" else v.rsplit("/", 1)[-1] if k in ("project", "file") else _snip(v, words), "n": n})
+    hits.sort(key=lambda h: (h["field"] != "name", -h["n"]))
+    return {"q": q, "hits": hits}
+
+
 class Handler(BaseHTTPRequestHandler):
     def _send(self, code, body, ctype="application/json"):
         data = body if isinstance(body, bytes) else json.dumps(body).encode()
@@ -1827,6 +2200,7 @@ class Handler(BaseHTTPRequestHandler):
             st = state()
             st["work"] = work_view(st) if st["regions"] else {"seeded": False, "items": [], "unsorted": [], "proposal": None}
             st["captures"] = recent_captures()
+            st["page"] = (HERE / "index.html").stat().st_mtime  # the page reloads itself when this changes
             self._send(200, st)
         elif self.path.startswith("/api/action?surface="):
             # On demand, for the reply view on a session the background pass skips (not "your turn").
@@ -1850,6 +2224,12 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, handoffs(self.path.split("=", 1)[1]))
         elif self.path.startswith("/api/steps?surface="):
             self._send(200, recent_steps(self.path.split("=", 1)[1]))
+        elif self.path.startswith("/api/search?q="):
+            self._send(200, search(urllib.parse.unquote_plus(self.path.split("=", 1)[1])))
+        elif self.path == "/api/galaxy":
+            self._send(200, galaxy(state()))
+        elif self.path.startswith("/api/planet?id="):
+            self._send(200, planet(self.path.split("=", 1)[1], state()))
         elif self.path == "/api/usage":
             self._send(200, usage())
         elif self.path.startswith("/api/timeline?surface="):
@@ -1863,6 +2243,12 @@ class Handler(BaseHTTPRequestHandler):
         body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
         if self.path == "/api/focus":
             focus(body["workspace"], body["surface"])
+        elif self.path in ("/api/dock", "/api/undock"):
+            try:
+                return self._send(200, dock(body["surface"]) if self.path == "/api/dock" else undock())
+            except (RuntimeError, subprocess.SubprocessError, json.JSONDecodeError, KeyError) as e:
+                print(f"{time.strftime('%H:%M:%S')} {self.path} failed: {e!r}", flush=True)
+                return self._send(502, {"error": str(e)[:300]})
         elif self.path == "/api/move":
             cmux("move-surface", "--surface", body["surface"], "--workspace", body["workspace"], "--focus", "false")
         elif self.path == "/api/new":
@@ -1937,8 +2323,15 @@ class Handler(BaseHTTPRequestHandler):
                 if op == "park":
                     return self._send(200, park(body["id"]))
                 if op == "resume":
-                    r = resume(body["id"])
-                    focus(r["workspace"], r["surface"])
+                    r = resume(body["id"], transcript=body.get("transcript"))
+                    if body.get("dock"):  # from the galaxy: show it beside the map instead of switching away
+                        for _ in range(30):  # the new tab shows up in the tree a moment after new-surface answers
+                            if _where(r["surface"]):
+                                break
+                            time.sleep(0.1)
+                        r.update(dock(r["surface"]))
+                    else:
+                        focus(r["workspace"], r["surface"])
                     return self._send(200, r)
                 if op == "edit":
                     return self._send(200, work_edit(body))

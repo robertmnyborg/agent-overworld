@@ -226,3 +226,86 @@ Personal tool. Visual "overworld" of all cmux agent sessions (workspaces = regio
 - Confirmation: instant "Capture received, finding where it belongs…" alert on send, replaced by "✓ <where it went>" (8s) plus a macOS notification "Capture filed" that stays in Notification Center. Not yet verified with a real send.
 - hs -c gotcha: after a hung `hs.reload()` every call returned "stack overflow"; quitting and relaunching Hammerspoon fixed it. Test JS passed to `evaluateJavaScript` must not redeclare the page's top-level consts (wrap in an IIFE).
 - Capture box redesign (same day): a leading link becomes a chip above the note ("Slack message <channel>", × drops it); screenshot shows as a chip; system font with whole-word wrap (old `word-break:break-all` split words); corner grip resizes (custom, via the same JS→Lua channel as the header drag, min 420x200); default 600x260. Sent text = link + note, same format as before. Verified by screenshots (`screencapture -l <hswindow id>`; `screen:snapshot(frame)` grabbed the wrong area) and synthetic grip drag (600x293 → 720x373). Title bar stays light in dark mode: `webview:darkMode` and `hs.preferencesDarkMode` both left it light; reverted. `hs -c 'hs.reload()'` hangs even under perl alarm; restart the app instead.
+
+## 2026-11-19 (Galaxy view, option A of 3)
+- Robert's job: track work and see its lineage as a context graph; Borderlands-style galaxy map but flat. Options offered: A galaxy map, B subway timeline, C free-form graph. Picked A, with B's timeline as the planet view.
+- Page: `g` or the Galaxy button. Goals = star systems (suns), work items = planets on orbit rings (needs-you first, dormant on the outer rings, faded), size = session count, amber beacon = needs you. Pinch/⌘-scroll zooms, drag/scroll pans, click a sun = fly into that goal, click a planet = side panel, Esc goes up, 0 fits all. Breadcrumb top left; link-kind filter + dormant toggle bottom left.
+- Planet panel: status, goal, next, waits on, Open tab / Resume / Park, History (one row per session on a shared time axis: first to last turn, tick per prompt, sub-agent count, purple curve = spun off from a sibling session via a /spinoff brief), Linked items (click flies there), projects, PRs, Slack threads, files edited.
+- Server: `/api/galaxy`, `/api/planet?id=`. Per-transcript facts (time span, prompt times, cwd, files edited, project folders, Slack threads from prompts, PR links in replies, handoff briefs written/read, sub-agent count) cached in `~/.overworld/facts.json` by mtime: cold 2.5s for 112 transcripts / 544 MB, warm instant.
+- Links are inferred, nothing new recorded: spinoff (item A wrote the brief a session of item B was started on; works across cmux relaunches, unlike edges.jsonl surface ids), same Slack thread, same files (ignoring files on >6 items), same project folder, same person (first name). Project and person links show only on hover (212 project links would be a tangle).
+- Dormant = derived, never written: active item, no live tab working or waiting, no transcript activity for 5 days (`DORMANT_DAYS`). First run: 81 items, 26 dormant, 9 need you.
+- Findings: no two items share an edited file (0 file links), only 3 spinoff and 2 thread links; 45 of 81 items have no goal (sorter goal-pick isn't covering new items). "Sort into goals" button on the map reruns `propose_groups` (Sonnet, ~2 cents) and replaces current goals; not run, Robert's call.
+- Verified in the automation Chrome with POSTs stubbed: galaxy renders, planet click opens the panel and flies to the item, linked items list the 2 cross-item spinoffs. Live server restarted (pid 31773). Not committed.
+- Not verified: real trackpad pinch/pan, Open tab / Resume / Park from the panel (stubbed).
+
+## 2026-11-19 (galaxy is the default)
+- Robert: "galaxy map isn't working". Cause: his cmux Overworld tab never reloaded, so it was still running the old page (no galaxy code). Fix: `/api/state` returns the page's mtime (`page`), and the page reloads itself when it changes. Verified: an index.html edit reached his tab within one tick.
+- The galaxy now opens on every load (the stored view is ignored); `w` and `g` still switch views for the current visit.
+- cmux's browser is WebKit: pinch zoom comes through gesture events, now handled alongside ctrl+wheel.
+- Arriving in the Overworld from a tab opens that tab's item in the galaxy.
+- Goals re-sorted at Robert's request ($0.08, 18s): Equip Sales Reps To Win 31, Build My Agent Tooling 20, Personal Life Admin 14, Grow Peek Product Revenue 10, Next Career Move 6; 0 without a goal. This replaced the old 4 goals.
+- Verified in his live tab (cmux browser eval + screenshot): galaxy renders 81 planets in 5 systems; sun click zooms in, Fit returns. Server restarted.
+
+## 2026-11-19 (Darlene's design review, all five changes)
+- Source: "Design Advice" Gemini notes + transcript, 2026-11-19 (Darlene Tjahjo). Her model: goals = planets, work items = landmasses, sessions = cities, roads between; flat; the group blinks when something needs you ("air control system"); blow things up.
+- Built: (1) goal suns pulse amber with "N need you" while any item needs you; (2) "Next that needs you (N)" button + `n` key cycles through them and opens each; (3) clicking an item zooms into its session map: sessions as square cities on a ring around the item, spokes to the item, purple roads for spinoffs, live ones click to open; everything else dims; (4) shared project folders drawn as hexagon hubs (2-12 items each, 41 hubs) with dashed roads to their items, replacing 212 item-to-item project lines; hidden zoomed far out; (5) distinct shape per level (sun / circle / square / hexagon, legend key) and bigger items: goals packed by size, items never under ~10px on screen.
+- Fixes found while testing: transcripts with no turns made the history start in 1970 (now skipped, and left off the session map); a hidden cmux tab (0 width) produced a negative zoom, so fitting now waits until the tab has a size.
+- Verified in the automation Chrome: 3 goals pulse, n visits 3 needs-you items in order, Harness Doctrine Updates opens 4 cities + history. In Robert's cmux tab the page hadn't reloaded yet (hidden tabs don't tick; it reloads when shown). Not committed.
+
+## 2026-11-19 (dock a session beside the map)
+- Robert: clicking a session took him to its cmux tab and away from the galaxy; wants it in the right pane. Options: A dock the real tab, B read/reply view in the panel. Picked A.
+- `/api/dock {surface}`: moves the session's real tab into the Overworld workspace (`move-surface`, then `split-off right`), focuses it, records home pane + index in `~/.overworld/dock.json`. Docking another first sends the current one back. `/api/undock` returns it to its pane at its old position (its workspace if the pane is gone, Scratch if that's gone too).
+- Page: city click, history row click and "Show beside map" dock; "Go to tab" keeps the old jump; breadcrumb shows "Docked: <title> · Send back". The map refits its current level when the pane narrows it.
+- The map keeps a docked session under its home workspace (state() reads it from the Overworld workspace), so its item, status and sorter attachment don't change. `/api/focus` on a docked tab focuses it in the Overworld.
+- Gotchas found: cmux applies a move a moment after answering OK, so dock/undock wait until the tree shows the move (`_settle`, up to 3s); a dock record younger than 10s is trusted even if the tree lags; state() reads the dock record before the tree. Closing a docked tab clears the record.
+- Verified with throwaway tabs: dock, undock to the same index, 3 back-to-back swaps under concurrent map polling, closed-tab cleanup. Page wiring checked in the automation Chrome with POSTs stubbed. Not yet done on a real session; not committed. Known gap: a cmux relaunch while docked leaves that tab in the Overworld workspace (new surface ids), move it home by hand.
+- 2026-11-19 (later): leaving the docked session's item (opening another item, `n`, Esc/up a level, Fit, closing the panel) now sends the docked session home; opening another session already swapped. dock.json is written atomically (the map refresh had hit a half-written file: JSONDecodeError in state()). Docks and send-backs are logged in server.log. Verified with stubbed POSTs: opening its own item sends nothing, another item or the galaxy level sends /api/undock. First real dock seen: QUEST-480 Hunter cleanup from Parrots.
+
+## 2026-11-19: Galaxy search
+- Search box under the breadcrumbs (key `/`). `GET /api/search?q=` matches items whose name, goal, next, note, waits-on, people, projects, edited files or prompt text hold every word. Prompt text (last 300 prompts per transcript, 600 chars each, system-reminder/command tags stripped) is now cached in facts.json as `texts`; entries without it are re-read once.
+- Matches get an orange ring and a name bubble; the rest dim. Bubbles that would cover a better-ranked one are hidden until you zoom in. Hovering a bubble shows the matched line; the hover card also shows it. Enter / Shift+Enter open the next / previous match; Esc clears.
+- Verified in the automation Chrome: "hunter" 14 matches, stepping, clearing, no-match text, two-word query, matches survive the 3s refresh, no console errors.
+
+## 2026-11-19: Galaxy motion pass
+- Plain JS/CSS, no library (Magic UI / Animate UI are React+Tailwind; not worth a rewrite). All motion off under prefers-reduced-motion.
+- Camera: one cancel token (`G.anim`, `gStop()`); grabbing the map or starting a new motion stops the old one. Fly-to uses an ease-out with ~2% overshoot (480ms). ⌘-scroll, ctrl-wheel and +/- zoom ease toward a target (`gZoomBy`). Releasing a drag mid-swipe glides to a stop (`gGlide`, 230ms decay). Two-finger scroll keeps the trackpad's own momentum.
+- Fades: planets, links, roads, hubs fade 180ms on focus/search. Opening an item: spokes grow, sessions fade in staggered 28ms apart; search bubbles rise in staggered; the item panel slides in.
+- Verified in the automation Chrome: one wheel notch zooms over ~100ms to the same final zoom as before, a 120px drag glides on, fly-to and city entrance render, no console errors.
+
+## 2026-11-19: Galaxy legibility pass + minimap
+- Worktrees (extra branch checkouts like parrots-nest-QUEST-477) fold into their main repo at read time (`main_repo()`, also by name when the folder is gone): 46 project hubs -> 35.
+- Project roads and hexagons are off by default (storage key bumped to `ow.gkinds3`); a planet's roads still show on hover/open. Labels at galaxy level only for needs-you / working / hovered / search hits; inside a goal every active item is labelled; dormant items are faint 8px dots with no label. Other goals fade to 7% while you're inside one (`away` class, kept through `gStatusPatch`). Legend collapsed to one "Legend & filters" line (remembered).
+- Minimap bottom right (moves left of the item panel) whenever the whole galaxy isn't in view: goals, item dots (blue working, orange needs you), and a rectangle for the current view. Click to fly there, drag to scrub. Camera tween factored into `gTween`.
+- Removed the auto-open on arrival (`gCameFrom`): switching to the Overworld no longer flies into the item you came from; the camera stays where you left it.
+
+## 2026-11-19: Reopen closed sessions into the dock
+- Docking only ever worked for sessions with an open tab; clicking a closed session did nothing (user hit this on "New Discover Report Run", both sessions closed).
+- Now a closed Claude session city is clickable: `POST /api/work/resume {id, transcript, dock: true}` reopens that exact transcript (`resume(..., transcript=)`), waits for the new tab to appear in the tree, and docks it. The panel's Resume became "Resume beside map" (latest session, docked). The flat Work view's Resume still switches to the workspace.
+- Verified: client sends the right request (stubbed POST in Chrome); server path tested with a throwaway OWDOCKTEST tab: new tab visible after 0.2s, docked into Overworld, sent back to Scratch, closed.
+
+## 2026-11-19: Depth pass (option B)
+- Planets, suns and cities share one highlight-and-shadow overlay (`#gshade`), so they read as lit spheres; suns get a hot-core gradient (`#gsun`).
+- Working items glow blue and items that need you glow amber (CSS drop-shadow on those only).
+- Each goal sits in a faint coloured haze (`.nebula`, 5 hues); it fades with the other goal when you're inside one.
+- Parallax stars: a canvas behind the map (`gStars`, called from `gApply`) with 3 layers that move 6%, 16% and 32% as much as the map. Redraw costs ~0.2ms a frame.
+
+## 2026-11-19: Star-system pass (option A)
+- Layout (`gLayout`): one orbit per item, gaps widen outward (36+4n world units), golden-angle placement nudged so planets keep 56 units clear. Needs-you items orbit closest. Dormant items form an outer asteroid belt (dotted `.belt` rings). Galaxy grew from ~2x to 6365x5126 world units.
+- Planet look from a stable hash of the item id (`gHash`): gas giant (3 band patterns), cratered rock, ice (frost cap + thin atmosphere), ringed giant (ring drawn behind and in front). Idle planets get their own muted hue; working/needs/done colours unchanged. Size varies +-15% around the sessions-based radius.
+- Suns: size grows with item count (46 + 8*sqrt(n), max 92); under 7 items an orange dwarf, under 14 a yellow sun, else white-hot. Each has a corona.
+- Names: inside a goal, names show at any zoom and sit just under the planet. `gLabelCull` hides names that would land on another planet or name (needs-you and working keep theirs first); hover or pin shows a hidden name.
+
+## 2026-11-19: Design-review fixes (Fable 5.2 review, all 12)
+Review screenshots: `.shots/review-*.png`; after: `.shots/fix-*.png`.
+1. Needs-you planets always show their name (amber, bold) at every zoom; the breadcrumb button names the next one ("Needs you: <title> (+n)").
+2. `gAutoSys`: zooming in by hand past 2x the whole-galaxy zoom with a goal under the screen centre makes it the current goal (names + breadcrumb); below 1.5x it leaves.
+3. A goal opens fitted to its inner 8 orbits (`s.inner`), not its full reach: zoom 0.27-0.38 -> 0.52-0.92; planets 21-54px instead of a flat 20px.
+4. `gFit` keeps a 64px top band clear for breadcrumb/search. Inside a goal the floating title/count hide; the breadcrumb carries "N active · N needs you".
+5. Amber only means needs-you: search rings/bubbles are white/blue, minimap goal outlines grey, goal counts muted, small-goal suns are red dwarfs.
+6. Search never dims needs-you items; bubbles keep clear of the breadcrumb, search box and results list.
+7. Header hint line shows galaxy keys while in the galaxy.
+8. Minimap dots are fixed screen sizes: needs-you 4px with a pulse, working 2.5px.
+9. Search results list under the box (title, status, goal, matched snippet). Arrow keys light the planet without moving the camera; Enter or click opens.
+10. One-session items (47 of 63 active) open the panel without flying in or drawing cities; camera only moves if the planet is off-screen or under the panel. "Show/Resume beside map" is the filled primary button. The panel now starts below the header.
+11. Systems pack to the real viewport shape (clamped 1.2-2.6); orbit gap growth capped at 64. Galaxy 6365x5126 -> 6394x4090, fit zoom 0.128 -> 0.145.
+12. Idle hues limited to 240-340 (purple to rose). A ring now means "has an open tab" (ring shown via `.live`); surface type (gas/rock/ice) stays decorative. Legend explains colours and rings.
