@@ -279,7 +279,7 @@ FULL_CHARS = 8000  # tail of the last reply sent for the reply view
 ACTION_EVERY = 20  # seconds between background passes that work out "your turn" actions
 
 
-ASK_CUE = re.compile(r"\b(next step|only you|your call|should i|want me to|shall i|pick|decide|approve|confirm with|let me know|say if|tell me)\b", re.I)
+ASK_CUE = re.compile(r"\b(next step|only you|your call|should i|want me to|shall i|pick|decide|approve|confirm with|let me know|say if|tell me|send me|waiting on you)\b", re.I)
 LIST_LINE = re.compile(r"^\s*([-*\u2022]|\d+[.)])\s")
 
 
@@ -312,8 +312,31 @@ def ask_of(raw):
     return plain(out)
 
 
+def asks_in_text(raw):
+    """Text-only fallback for a reply with no worked-out action yet: does its end ask a question or name a step for the user?"""
+    text = re.sub(r"https?://\S+", "", raw)
+    paras = [p for p in re.split(r"\n\s*\n", text) if p.strip()][-4:]
+    tail = " ".join(" ".join(paras).split())
+    return bool(ASK_CUE.search(tail) or re.search(r"\?(\s|$)", tail))
+
+
+def needs_you(status, turn_role, action, full):
+    """Does this session need Robert? Based on the last reply, not on cmux notifications, which miss most open asks.
+    An unanswered reply needs him when its worked-out action is an action or decision. Before that action exists, a
+    "waiting" status or an ask in the reply's text flags it: a false flag costs a glance, a missed one costs the work.
+    turn_role None means no transcript to read; full is then the on-screen recap, and its text decides."""
+    if status == "waiting":
+        return not (action and action.get("kind") == "none")
+    if turn_role in ("user", "tool_use") or not full:
+        return False  # no reply, or the user already answered it and a new turn is under way
+    if action:
+        return action.get("kind") in ("action", "decision")
+    return asks_in_text(full)
+
+
 def last_reply(transcript):
-    """(last assistant text ~240 chars, last user/assistant turn time, its role, full text of that reply) from a Claude transcript."""
+    """(last assistant text ~240 chars, last user/assistant turn time, its role, full text of that reply) from a Claude transcript.
+    The role is "tool_use" when the newest record is the assistant calling a tool, so the turn is still going."""
     path = Path(transcript or "")
     if not path.is_file():
         return "", None, None, ""
@@ -332,10 +355,12 @@ def last_reply(transcript):
             e = json.loads(raw)
         except json.JSONDecodeError:
             continue
-        if e.get("type") not in ("user", "assistant"):
-            continue
+        if e.get("type") not in ("user", "assistant") or e.get("isCompactSummary") or e.get("isMeta"):
+            continue  # a compaction summary or injected meta record is not a turn: the reply before it is still unanswered
         if turn_at is None:
             turn_at, turn_role = e.get("timestamp"), e["type"]
+            if turn_role == "assistant" and any(isinstance(c, dict) and c.get("type") == "tool_use" for c in e.get("message", {}).get("content", [])):
+                turn_role = "tool_use"  # mid-turn: the newest reply text is not the turn's last word
         if e["type"] != "assistant":
             continue
         parts = [c.get("text", "") for c in e.get("message", {}).get("content", []) if isinstance(c, dict) and c.get("type") == "text"]
@@ -907,6 +932,21 @@ def recent_steps(surface):
     return {"steps": steps[:STEPS]}
 
 
+_moved = {}  # recorded transcript path -> where it actually is
+
+
+def transcript_of(s):
+    """cmux records the transcript under the launch directory, but ~/bin/claude-home starts sessions at ~, so Claude writes
+    them under that project folder instead. Fall back to wherever the session id's transcript exists."""
+    path = s.get("transcriptPath")
+    if not path or Path(path).is_file() or not s.get("sessionId"):
+        return path
+    if path not in _moved or not Path(_moved[path] or "").is_file():
+        hits = list((Path.home() / ".claude" / "projects").glob(f"*/{s['sessionId']}.jsonl"))
+        _moved[path] = str(hits[0]) if hits else None
+    return _moved[path] or path
+
+
 def agent_sessions():
     """surface_id -> {agent, lifecycle, recap, cwd, updated, pid} for Claude and agy."""
     out = {}
@@ -920,11 +960,12 @@ def agent_sessions():
         if surface and (surface not in best or rank > best[surface][0]):
             best[surface] = (rank, s)
     for surface, (_, s) in best.items():
-        text, turn_at, turn_role, full = last_reply(s.get("transcriptPath"))
+        transcript = transcript_of(s)
+        text, turn_at, turn_role, full = last_reply(transcript)
         out[surface] = {"agent": "claude", "lifecycle": s.get("agentLifecycle"), "recap": text or s.get("lastBody") or "",
                         "full": full[-FULL_CHARS:], "ask": ask_of(full),
                         "cwd": s.get("cwd"), "updated": s.get("updatedAt"), "pid": s.get("pid"),
-                        "turn_at": turn_at, "turn_role": turn_role, "transcript": s.get("transcriptPath")}
+                        "turn_at": turn_at, "turn_role": turn_role, "transcript": transcript}
     agy = load_json(CMUXTERM / "antigravity-hook-sessions.json").get("sessions", {})
     for s in agy.values():
         cur = out.get(s["surfaceId"])
@@ -1078,13 +1119,13 @@ def work_out_action(full, prompt):
 
 
 def keep_actions():
-    """Background: work out the action for every "your turn" session whose last reply has none yet, one call at a time."""
+    """Background: work out the action for every session sitting on an unanswered reply that has none yet, one call at a time."""
     while True:
         try:
             agents = agent_sessions()
             for r in state()["regions"]:
                 for t in r["sessions"]:
-                    if t["status"] == "waiting" and t["full"] and not cached_action(t["full"]):
+                    if (t["status"] == "waiting" or t["turn_role"] == "assistant") and t["full"] and not cached_action(t["full"]):
                         work_out_action(t["full"], (recent_prompts((agents.get(t["id"]) or {}).get("transcript"), 1) or [""])[-1])
         except (subprocess.SubprocessError, json.JSONDecodeError, KeyError, RuntimeError, OSError) as e:
             print(f"{time.strftime('%H:%M:%S')} keep_actions failed: {e!r}"[:400], flush=True)
@@ -1208,7 +1249,7 @@ def status(sess, unread_title, last_event):
     if unread_title and unread_title.startswith("Waiting"):
         return "waiting"
     event = last_event[0] if last_event else None
-    if event == "SessionStart" and sess.get("turn_role") == "assistant":
+    if event == "SessionStart" and sess.get("turn_role") in ("assistant", "tool_use"):
         return "waiting"  # restored after a cmux relaunch: the last reply is still unanswered
     if event == "Notification" or (event is None and sess["lifecycle"] == "needsInput"):
         return "waiting"
@@ -1268,12 +1309,19 @@ def state():
                                   "since": since, "recap": recap, "ask": sess.get("ask", "") if sess else "",
                                   "full": sess.get("full", "") if sess else "",
                                   "action": cached_action(sess.get("full", "")) if sess else None, "subagents": lane, "subagents_more": more,
+                                  "turn_role": sess.get("turn_role") if sess else None,
                                   "agent": sess["agent"] if sess else None,
                                   "cwd": sess["cwd"] if sess else None, "transcript": sess.get("transcript") if sess else None,
                                   "ws_ref": ws["ref"], "ws_title": ws["title"],
                                   "updated": sess["updated"] if sess else None,
                                   "docked": bool(pane.get("docked")),
                                   "here": sf.get("selected_in_pane") and pane.get("focused") and ws.get("selected")})
+                    t = sessions[-1]
+                    t["needs"] = needs_you(t["status"], t["turn_role"], t["action"], t["full"] or (t["recap"] if sess and not t["turn_role"] else ""))
+                    if t["needs"] and t["status"] in ("idle", "done", "working") and alive(sess["pid"]):
+                        t["status"] = "waiting"  # status came from notifications and hook events; the open ask wins
+                    elif not t["needs"] and t["status"] == "waiting":
+                        t["status"] = "idle"  # its reply was worked out to ask nothing
             if sessions:
                 regions.append({"id": ws["id"], "title": ws["title"], "group": group_of.get(ws["ref"]), "sessions": sessions,
                             "scratch": ws["title"] == SCRATCH})
@@ -1613,12 +1661,11 @@ def work_view(st):
         tabs = [live[tr] for tr in i["sessions"] if tr in live]
         statuses = [t["status"] for t in tabs]
         roll = min(statuses, key=lambda s: rank.get(s, 9)) if statuses else "none"
-        waiting = [t for t in tabs if t["status"] == "waiting"]
-        nxt, needs = i["next"], False
-        if waiting:
-            a = waiting[0].get("action")
-            needs = not (a and a.get("kind") == "none")  # a finished reply that asks nothing isn't "needs you"
-            nxt = (a and a.get("action")) or waiting[0].get("ask") or nxt
+        asking = [t for t in tabs if t["needs"]]
+        nxt, needs = i["next"], bool(asking)
+        if asking:
+            a = asking[0].get("action")
+            nxt = (a and a.get("action")) or asking[0].get("ask") or nxt
         items.append({k: i[k] for k in ("id", "title", "goal", "people", "state", "note", "waits_on", "updated")} |
                      {"group": i.get("group", ""), "asked_by": i.get("asked_by", [])[-3:]} |
                      {"next": nxt, "needs": needs, "tabs": [t["id"] for t in tabs], "status": roll, "new": i.get("new", False),
@@ -2092,7 +2139,7 @@ def galaxy(st):
         fs = [facts[tr] for tr in i["sessions"] if tr in facts]
         v = view.get(i["id"], {})
         last_active = max([f["last"] or 0 for f in fs] + [i.get("updated", 0)])
-        live_need = v.get("status") in ("waiting", "working")
+        live_need = v.get("needs") or v.get("status") in ("waiting", "working")
         dormant = i["state"] == "active" and not live_need and now - last_active > DORMANT_DAYS * 86400
         iid = i["id"]
         files[iid] = {f for x in fs for f in x["files"] if not f.startswith(NOISE_PATHS) and "/.overworld/" not in f}
