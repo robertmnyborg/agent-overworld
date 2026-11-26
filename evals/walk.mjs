@@ -47,8 +47,15 @@ try {
       const n = walker.currentNode, e = n.parentElement;
       if (!n.textContent.trim() || !e) continue;
       const r = e.getBoundingClientRect(), cs = getComputedStyle(e);
-      if (r.width && r.height && r.bottom > 0 && r.right > 0 && r.top < innerHeight && r.left < innerWidth && cs.visibility !== "hidden" && cs.display !== "none" && +cs.opacity > 0)
-        out.push(n.textContent);
+      if (!(r.width && r.height && cs.visibility !== "hidden" && cs.display !== "none" && +cs.opacity > 0)) continue;
+      // The text's middle must sit inside the viewport and inside every scrolling or clipping ancestor.
+      const mx = r.left + Math.min(r.width, 40) / 2, my = r.top + r.height / 2;
+      let ok = my > 0 && my < innerHeight && mx > 0 && mx < innerWidth;
+      for (let a = e.parentElement; ok && a; a = a.parentElement) {
+        if (a.hidden || getComputedStyle(a).display === "none") ok = false;
+        else if (getComputedStyle(a).overflowY !== "visible") { const ar = a.getBoundingClientRect(); ok = my >= ar.top && my <= ar.bottom; }
+      }
+      if (ok) out.push(n.textContent);
     }
     return out.join(" ").replace(/\\s+/g, " ");
   })()`);
