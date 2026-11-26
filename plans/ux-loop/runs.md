@@ -6,7 +6,7 @@ Checks: `python3 evals/check_needs_you.py` (S1), `node evals/walk.mjs` against `
 | Round | Date | Item | PR | S1 | S2 | S3 | S4 | Cost |
 |---|---|---|---|---|---|---|---|---|
 | baseline | 2026-11-26 | (main) | | 3/19, 0 false | 2 + Cmd-1 | 0 asks | 3 / 16 | |
-| 1 | 2026-11-26 | #1 needs you from the last reply | PR_URL | 19/19, 0 false (live: same) | 2 | 0/20 | 2 / 16 | $3.19 (ccusage, session 1abe41a4, includes writing the checks) |
+| 1 | 2026-11-26 | #1 needs you from the last reply | [#8](https://github.com/robertmnyborg/agent-overworld/pull/8) | 19/19, 0 false (live: same) | 2 | 0/20 | 2 / 16 | $3.19 (ccusage, session 1abe41a4, includes writing the checks) |
 
 ## Round 1 notes
 - Audit step: the 2026-11-25 audit seeded the backlog; the first Fable re-audit runs in round 2, after this PR is live, so it audits the change.
