@@ -7,7 +7,7 @@ Checks: `python3 evals/check_needs_you.py` (S1), `node evals/walk.mjs` against `
 |---|---|---|---|---|---|---|---|---|
 | baseline | 2026-11-26 | (main) | | 3/19, 0 false | 2 + Cmd-1 | 0 asks | 3 / 16 | |
 | 1 | 2026-11-26 | #1 needs you from the last reply | [#8](https://github.com/robertmnyborg/agent-overworld/pull/8) | 19/19, 0 false (live: same) | 2 | 0/20 | 2 / 16 | $3.19 (ccusage, session 1abe41a4, includes writing the checks) |
-| 2 | 2026-11-26 | #2/#7 needs-you list on the first screen | [#9](https://github.com/robertmnyborg/agent-overworld/pull/9) | 19/19, 0 false | 1 | 20/20 | 2 / 15 | $4.37 (ccusage, session total $7.56 minus round 1; Fable audit not included yet) |
+| 2 | 2026-11-26 | #2/#7 needs-you list on the first screen | [#9](https://github.com/robertmnyborg/agent-overworld/pull/9) | 19/19, 0 false | 1 | 20/20 | 2 / 15 before the r2 audit; 4 / 19 after it added 9 findings | $4.37 (ccusage, session total $7.56 minus round 1; Fable audit not included yet) |
 
 ## Round 1 notes
 - Audit step: the 2026-11-25 audit seeded the backlog; the first Fable re-audit runs in round 2, after this PR is live, so it audits the change.
@@ -21,3 +21,4 @@ Checks: `python3 evals/check_needs_you.py` (S1), `node evals/walk.mjs` against `
 - The legend moves to the bottom right while the list is up; the map fits to the space right of the list.
 - walk.mjs S3 now ignores text scrolled out of view inside a scrolling list; before the fix the check would have passed rows hidden below the fold.
 - 20 rows fit at 1440x900. With more than about 20 the list scrolls and S3 will drop; not checked at 900x900.
+- Fable re-audit (on the round 1 code, :7718): 9 new findings, 35 to 43 (2 blockers, 5 major, 2 minor), now in the backlog. Round 2 already fixes #41 and part of #35, #36, #38 and #40. Finding 39 says "Parrots Nest" is a false flag, but the golden set labels it yes; only Robert can change that label.
