@@ -9,10 +9,12 @@ status == "waiting".
 With --reclassify, the frozen action kind is replaced by a fresh call to the server's current classifier rules (one Haiku call
 per row, nothing cached), so a change to those rules can be measured. The user prompt comes from the row's transcript now.
 
-Usage: python3 evals/check_needs_you.py [--json] [--reclassify]
+--refreeze does the same and writes the fresh kinds back to the golden set (labels untouched), for after a rule change.
+
+Usage: python3 evals/check_needs_you.py [--json] [--reclassify | --refreeze]
 Exit 0 when the S1 target holds (every yes flagged, at most 1 false flag), else 1.
 """
-import json, os, subprocess, sys
+import hashlib, json, os, subprocess, sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -47,9 +49,14 @@ def flag(row):
 
 def main():
     rows = [json.loads(l) for l in GOLDEN.read_text().splitlines() if l.strip()]
-    if "--reclassify" in sys.argv:
+    if "--reclassify" in sys.argv or "--refreeze" in sys.argv:
         for r in rows:
             r["classifier_kind"] = reclassify(r)
+    if "--refreeze" in sys.argv:
+        rules = hashlib.sha1(server.ACTION_RULES.encode()).hexdigest()[:12]
+        for r in rows:
+            r["classifier_rules_sha"] = rules
+        GOLDEN.write_text("".join(json.dumps(r) + "\n" for r in rows))
     yes = [r for r in rows if r["needs_you"]]
     no = [r for r in rows if not r["needs_you"]]
     missed = [r for r in yes if not flag(r)]
