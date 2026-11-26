@@ -6,10 +6,13 @@ worked out for that reply (None when it had none), and the reply's tail. This ru
 inputs and compares with the labels. When server.py has no needs_you() (before round 1), the rule is the old one:
 status == "waiting".
 
-Usage: python3 evals/check_needs_you.py [--json]
+With --reclassify, the frozen action kind is replaced by a fresh call to the server's current classifier rules (one Haiku call
+per row, nothing cached), so a change to those rules can be measured. The user prompt comes from the row's transcript now.
+
+Usage: python3 evals/check_needs_you.py [--json] [--reclassify]
 Exit 0 when the S1 target holds (every yes flagged, at most 1 false flag), else 1.
 """
-import json, sys
+import json, os, subprocess, sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -18,6 +21,19 @@ import server  # noqa: E402  (module import starts nothing; the server only runs
 
 GOLDEN = HERE / "needs-you-golden.jsonl"
 MAX_FALSE = 1
+
+
+def reclassify(row):
+    """The server's current classifier on the frozen reply, without touching its cache."""
+    prompt = (server.recent_prompts(row["transcript"], 1) or [""])[-1] if Path(row["transcript"]).exists() else ""
+    payload = {"user_last_prompt": prompt, "agent_reply": row["last_reply_tail"]}
+    out = subprocess.run([*server.NAMER, "--json-schema", json.dumps(server.ACTION_SCHEMA)],
+                         input=server.ACTION_RULES + json.dumps(payload, indent=1), capture_output=True, text=True,
+                         timeout=server.NAME_TIMEOUT, cwd="/tmp", env={**os.environ, "MAX_THINKING_TOKENS": "0"}, check=True)
+    result = json.loads(out.stdout)
+    if result.get("is_error"):
+        raise RuntimeError(result.get("result", "action call failed"))
+    return result["structured_output"]["kind"]
 
 
 def flag(row):
@@ -31,6 +47,9 @@ def flag(row):
 
 def main():
     rows = [json.loads(l) for l in GOLDEN.read_text().splitlines() if l.strip()]
+    if "--reclassify" in sys.argv:
+        for r in rows:
+            r["classifier_kind"] = reclassify(r)
     yes = [r for r in rows if r["needs_you"]]
     no = [r for r in rows if not r["needs_you"]]
     missed = [r for r in yes if not flag(r)]

@@ -330,3 +330,7 @@ Review screenshots: `.shots/review-*.png`; after: `.shots/fix-*.png`.
 ## 2026-11-26 (UX loop round 2)
 - Branch `feat/needs-you-list` (stacked on round 1): "Needs you" list on the galaxy's first screen with the ask and a one-click Open per session; header count = sessions that need you. S2 2 -> 1 click, S3 0 -> 20/20.
 - Round 2 Fable re-audit ran against the round 1 code on a :7718 test copy (PR #8 not merged yet); its findings go to `plans/ux-audit-r2.md` (local) and the backlog.
+
+## 2026-11-26 (UX loop: Parrots Nest label)
+- Robert ruled: when the requested work is done and the only ask is to start a fresh session (/spinoff, /compact), that is an FYI, not needs-you. Golden row "Parrots Nest" relabeled no (local file); the action classifier rules say so.
+- `evals/check_needs_you.py --reclassify` re-runs the current classifier on the golden replies (one Haiku call per row, no cache). New rules: 16/18, 1/13. Old rules: 16/18, 2/13. The 2 misses and 1 false flag are on both, logged as backlog #44.

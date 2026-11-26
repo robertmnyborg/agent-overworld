@@ -1074,6 +1074,8 @@ say what the user must do or decide so the work moves to the next step.
   action = that step as an imperative sentence, max 20 words, naming who/what. options = [].
 - kind "none": the reply asks nothing and needs nothing. action = "Nothing needed. Suggested next: " + the most useful
   next instruction the user could give, max 15 words. options = [].
+  A reply whose requested work is done and whose only ask is housekeeping (start a fresh session, /spinoff, /compact,
+  restart a tool) is "none": that is an FYI. If the work is not done, judge the reply's other asks as usual.
 Plain words, no markdown, no quotes, no emoji. Use names and numbers from the reply. Input:
 """
 _actions = {"cache": None, "lock": threading.Lock(), "busy": set()}

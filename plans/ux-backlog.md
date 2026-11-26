@@ -43,10 +43,11 @@ Order: blockers first, then audit rank. S4 counts open blockers / majors. Full w
 | 36 | blocker | open (r2: the session shows in the needs-you list; still no planet, not in search) | A flagged session on no work item has no planet ("HubSpot Cleanup Proposal") | r2 audit |
 | 37 | major | open | A session whose agent ended (shell) is flagged in the galaxy only; a reply would reach a plain shell | r2 audit |
 | 38 | major | open (r2: the list shows both tabs as rows; the item panel still shows one) | An item with two asking sessions shows one ask and counts once | r2 audit |
-| 39 | major | open, needs Robert: "Parrots Nest" is labeled yes in the golden set | 1 clear false flag (a /spinoff session-size note) and 3 weak ones (optional offers) | r2 audit |
+| 39 | major | fixed r3 (Parrots Nest): Robert ruled a new-session recommendation after finished work is FYI; label corrected, classifier rule added. 3 weak flags (optional offers) still open | 1 clear false flag (a /spinoff session-size note) and 3 weak ones (optional offers) | r2 audit |
 | 40 | major | open (r2: list sorts by longest wait and falls back to cmux's update time for the age) | Asks come with no order; 10 of 20 show no waiting age; decision and chore look alike | r2 audit |
 | 41 | major | fixed r2: needs-you list with every ask on the first screen | First screen shows 18 amber names, 0 of 20 asks, overlapping labels | r2 audit |
 | 42 | minor | open | Decisions' ready answers show only in the Inbox after a row click | r2 audit |
 | 43 | minor | open | 4 of 19 asks cut off at two lines on Tabs view cards | r2 audit |
+| 44 | major | open: a fresh classifier call on the golden set misses 2 borderline yes rows (Communication harness, Tenet Drafts Review) and flags Liked AI Stories, on old and new rules alike | Frozen kinds pass; live kinds drift. A replied-to cache hides it until the reply text changes | r3 reclassify check |
 
 Open: 4 blockers, 19 major, 17 minor.
