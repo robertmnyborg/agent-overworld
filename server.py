@@ -1074,6 +1074,10 @@ say what the user must do or decide so the work moves to the next step.
   action = that step as an imperative sentence, max 20 words, naming who/what. options = [].
 - kind "none": the reply asks nothing and needs nothing. action = "Nothing needed. Suggested next: " + the most useful
   next instruction the user could give, max 15 words. options = [].
+  A reply whose requested work is done and whose only ask is housekeeping (start a fresh session, /spinoff, /compact,
+  restart a tool) is "none": that is an FYI. So is an optional offer that only repackages finished work (a shareable page,
+  a Confluence doc, an email draft, a summary). So is a next step the agent should take itself (commit, push, open a PR
+  and tag its reviewer), such as work left uncommitted. If the work is not done, judge the reply's other asks as usual.
 Plain words, no markdown, no quotes, no emoji. Use names and numbers from the reply. Input:
 """
 _actions = {"cache": None, "lock": threading.Lock(), "busy": set()}

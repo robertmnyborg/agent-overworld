@@ -330,3 +330,9 @@ Review screenshots: `.shots/review-*.png`; after: `.shots/fix-*.png`.
 ## 2026-11-26 (UX loop round 2)
 - Branch `feat/needs-you-list` (stacked on round 1): "Needs you" list on the galaxy's first screen with the ask and a one-click Open per session; header count = sessions that need you. S2 2 -> 1 click, S3 0 -> 20/20.
 - Round 2 Fable re-audit ran against the round 1 code on a :7718 test copy (PR #8 not merged yet); its findings go to `plans/ux-audit-r2.md` (local) and the backlog.
+
+## 2026-11-26 (UX loop: Parrots Nest label)
+- Robert ruled: when the requested work is done and the only ask is to start a fresh session (/spinoff, /compact), that is an FYI, not needs-you. Golden row "Parrots Nest" relabeled no (local file); the action classifier rules say so.
+- `evals/check_needs_you.py --reclassify` re-runs the current classifier on the golden replies (one Haiku call per row, no cache). New rules: 16/18, 1/13. Old rules: 16/18, 2/13. The 2 misses and 1 false flag are on both, logged as backlog #44.
+- Robert's second ruling: an optional offer that only repackages finished work (shareable page, Confluence doc, email draft) is FYI. Next steps that move the goal (commit, push, PR) should just happen, with a PR and tagged reviewer when one is needed; that rule went into ~/CLAUDE.md, not the classifier. Fresh classifier run after both rules: 17/18, 0/13 (miss: "Communication harness", which ends on an uncommitted note).
+- Robert's third ruling: finished work left uncommitted is the agent's own next step, not needs-you. "Communication harness skills and hooks" and "Tenet Drafts Review" relabeled no; classifier rule added. Golden kinds refrozen on the new rules (`--refreeze`; labels untouched): S1 16/16, 0/15 false.
