@@ -929,7 +929,7 @@ function sessionEl(t, isChild) {
   row.append(label);
   // "your turn" wins even while background agents run: the session still needs an action from you.
   const bg = t.subagents.filter(a => a.status === "running").length;
-  const statusText = LABEL[t.status] + (t.status === "waiting" && bg ? ` (${bg} agent${bg > 1 ? "s" : ""} still running)` : "");
+  const statusText = LABEL[t.status] + (t.exited ? " (agent exited: open and resume it)" : t.status === "waiting" && bg ? ` (${bg} agent${bg > 1 ? "s" : ""} still running)` : "");
   row.append(el("span", "meta", [statusText, ago(t.since), t.agent].filter(Boolean).join(" · ")));
   const x = el("span", "x" + (armed === t.id ? " armed" : ""), armed === t.id ? "close?" : "×");
   x.title = "Close this session (click twice)";
@@ -1878,7 +1878,7 @@ function gCrumbs() {
   add("Galaxy", G.sys == null && !G.planet ? null : gGoGalaxy, G.sys == null && !G.planet);
   if (G.sys != null) {
     add(G.suns[G.sys] ? G.suns[G.sys].title : "", G.planet ? () => gGoSystem(G.sys) : null, !G.planet);
-    const ps = G.data.planets.filter(p => G.pos[p.id] && G.pos[p.id].sys === G.sys), need = ps.filter(p => p.needs).length;
+    const ps = G.data.planets.filter(p => G.pos[p.id] && G.pos[p.id].sys === G.sys), need = gNeedCount(ps);
     if (!G.planet) c.append(el("span", "gcount" + (need ? " alert" : ""), `${ps.filter(p => !p.dormant).length} active${need ? ` · ${need} need${need === 1 ? "s" : ""} you` : ""}`));
   }
   if (G.planet) { const p = G.data.planets.find(x => x.id === G.planet); add(p ? p.title : "", null, true); }
@@ -1894,7 +1894,8 @@ function gCrumbs() {
   const needs = gNeedsOrder();
   if (needs.length) {
     const at = needs.findIndex(p => p.id === G.planet), nx = needs[(at + 1) % needs.length];
-    const b = el("button", "gnext", `Needs you: ${nx.title.length > 34 ? nx.title.slice(0, 33) + "…" : nx.title}${needs.length > 1 ? ` (+${needs.length - 1})` : ""}`);
+    const total = gNeedsSessions().length;
+    const b = el("button", "gnext", `Needs you (${total}): ${nx.title.length > 34 ? nx.title.slice(0, 33) + "…" : nx.title}`);
     b.title = "Fly to the next item waiting on you (key n)"; b.onclick = gNextNeeds;
     c.append(b);
   }
@@ -1917,6 +1918,11 @@ function gRefreshCrumbs() { const old = G.wrap.querySelector(".gcrumbs"); if (ol
 function gNeedsSessions() {
   return (last ? last.regions : []).flatMap(r => r.sessions).filter(t => t.needs)
     .sort((a, b) => gWaitedFrom(a) - gWaitedFrom(b));
+}
+// Every "needs you" number counts sessions, the same set as the list: items with two asks count twice.
+function gNeedCount(items) {
+  const ids = new Set(gNeedsSessions().map(t => t.id));
+  return items.reduce((n, i) => n + i.tabs.filter(id => ids.has(id)).length, 0);
 }
 function gWaitedFrom(t) { return Date.parse(t.since) || (t.updated ? t.updated * 1000 : Date.now()); }
 function gNeedsList() {
@@ -2164,7 +2170,7 @@ function gSunPatch() {
   if (!G.wrap) return;
   Object.entries(G.suns).forEach(([id, s]) => {
     const ps = G.data.planets.filter(p => G.pos[p.id] && G.pos[p.id].sys === id);
-    const need = ps.filter(p => p.needs).length, dorm = ps.filter(p => p.dormant).length;
+    const need = gNeedCount(ps), dorm = ps.filter(p => p.dormant).length;
     const g = G.world.querySelector(`.gsys[data-sys="${CSS.escape(id)}"]`);
     if (!g) return;
     g.classList.toggle("alert", need > 0);
@@ -2662,8 +2668,7 @@ function renderWork(state) {
   }
   const items = w.items.filter(i => i.state !== "done");
   const goals = w.groups || [];
-  const needs = items.filter(i => i.needs);
-  tally.replaceChildren(...[["waiting", needs.length, "need you"], ["working", items.filter(i => i.status === "working").length, "working"],
+  tally.replaceChildren(...[["waiting", gNeedsSessions().length, "need you"], ["working", items.filter(i => i.status === "working").length, "working"],
     ["shell", items.filter(i => i.state === "parked" && i.status === "none").length, "parked"]].map(([k, n, label]) => {
     const s = el("span"), d = el("span", "dot"); d.style.background = `var(--${k})`; s.append(d, el("b", null, n), " " + label); return s;
   }));
@@ -2798,7 +2803,7 @@ function workMap(state, w, items, goals) {
     h.append(name);
     if (g) h.append(pencil(name, g.title, title => edit({ op: "group-rename", group: g.id, title })));
     box.append(h);
-    const n = mine.filter(i => i.needs).length, open = mine.reduce((s, i) => s + i.tabs.length, 0);
+    const n = gNeedCount(mine), open = mine.reduce((s, i) => s + i.tabs.length, 0);
     box.append(el("div", "masked", `${mine.length} item${mine.length === 1 ? "" : "s"} · ${open} open tab${open === 1 ? "" : "s"}` + (n ? ` · ${n} need you` : "")));
     box.ondragover = e => { if (draggingItem) { e.preventDefault(); box.classList.add("drop"); } };
     box.ondragleave = () => box.classList.remove("drop");
