@@ -1374,8 +1374,11 @@ def state():
                                   "here": sf.get("selected_in_pane") and pane.get("focused") and ws.get("selected")})
                     t = sessions[-1]
                     t["needs"] = needs_you(t["status"], t["turn_role"], t["action"], t["full"] or (t["recap"] if sess and not t["turn_role"] else ""))
-                    if t["needs"] and t["status"] in ("idle", "done", "working") and alive(sess["pid"]):
-                        t["status"] = "waiting"  # status came from notifications and hook events; the open ask wins
+                    if t["needs"] and t["status"] in ("idle", "done", "working", "shell"):
+                        # status came from notifications, hook events and the process; the open ask wins, so every view counts it.
+                        # An exited agent's ask still needs Robert (resume it), but a reply can't be typed into its tab.
+                        t["exited"] = not (sess and alive(sess["pid"]))
+                        t["status"] = "waiting"
                     elif not t["needs"] and t["status"] == "waiting":
                         t["status"] = "idle"  # its reply was worked out to ask nothing
             if sessions:
@@ -2400,6 +2403,9 @@ class Handler(BaseHTTPRequestHandler):
             cmux("workspace-group", "rename", body["group"], "--name", body["name"])
         elif self.path == "/api/send":
             # Bracketed paste + Enter, so multi-line text arrives as one message. Errors go back to the page.
+            sess = agent_sessions().get(body["surface"])
+            if sess and not alive(sess["pid"]):  # its agent exited: the paste would run as a shell command
+                return self._send(409, {"error": "This session's agent has exited, so the reply would run as a shell command. Open the tab and resume it first."})
             out = subprocess.run([CMUX, "paste", "--workspace", body["workspace"], "--surface", body["surface"], "--submit", "-"],
                                  input=body["text"], capture_output=True, text=True, timeout=10,
                                  env={**os.environ, "CMUX_QUIET": "1"})
