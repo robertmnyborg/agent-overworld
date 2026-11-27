@@ -7,7 +7,7 @@ Order: blockers first, then audit rank. S4 counts open blockers / majors. Full w
 |---|---|---|---|---|
 | 1 | blocker | fixed r1 (PR pending) | "3 needs you" misses 9 open sessions whose last reply asks for an action (6) or a decision (3), for example "Approve creating two HubSpot... | audit 2026-11-25 |
 | 2 | blocker | open (r2: asks of needs-you sessions now on the first screen; recap of the rest, hover card and reply box still missing) | The default view shows no recap, no last reply and no reply box | audit 2026-11-25 |
-| 3 | blocker | open | Inbox, row, Reply: the Inbox closes and nothing opens when the galaxy or Work view is behind it | audit 2026-11-25 |
+| 3 | blocker | fixed r4: reply view builds from the session record; Reply on each needs-you row and in the Inbox works from every view | Inbox, row, Reply: the Inbox closes and nothing opens when the galaxy or Work view is behind it | audit 2026-11-25 |
 | 4 | major | open | The `a` key renames every workspace and tab (one model call per workspace) from any view, with no confirm and no undo | audit 2026-11-25 |
 | 5 | major | open | One session, three names | audit 2026-11-25 |
 | 6 | major | open | One state, several words: "your turn", "needs you", "waiting" | audit 2026-11-25 |
@@ -50,4 +50,4 @@ Order: blockers first, then audit rank. S4 counts open blockers / majors. Full w
 | 43 | minor | open | 4 of 19 asks cut off at two lines on Tabs view cards | r2 audit |
 | 44 | major | fixed r3: new rules (stalled = action, own-tool checks = none, offers = decision) + 3-vote majority; S1 17/17, 0-1/14 over 3 runs | Frozen kinds pass; live kinds drift. A replied-to cache hides it until the reply text changes | r3 reclassify check |
 
-Open: 4 blockers, 18 major, 17 minor.
+Open: 3 blockers, 18 major, 17 minor.
