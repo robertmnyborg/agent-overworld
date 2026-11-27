@@ -314,3 +314,15 @@ Review screenshots: `.shots/review-*.png`; after: `.shots/fix-*.png`.
 - `server.py` capture template, step 2: the agent now opens its reply with "Moved: <old workspace / tab> -> <new workspace / tab>. Same conversation." when it moved or renamed the tab, so an unexpected notification explains itself. Same rule added to `~/CLAUDE.md` Communication.
 - Merged (PR #6) and live server restarted on it (pid 39499), 2026-11-25.
 - Next: confirm the next capture that moves a tab opens with the Moved line.
+
+## 2026-11-25 (UX audit, no code changed)
+- Report: `plans/ux-audit-2026-11-25.md`; screenshots `.shots/ux-audit-01` to `-14`. 34 findings: 3 blockers, 16 major, 15 minor.
+- Blockers: "3 needs you" missed 9 open sessions whose last reply asks for an action or decision (they read idle and sit on dormant planets); the galaxy shows no recap or reply box; Inbox Reply does nothing outside the Tabs view.
+- Top change proposed: count an open ask as needs-you until answered or dismissed, and open on a needs-you list instead of the galaxy. Nothing built; Robert picks.
+
+## 2026-11-26 (UX loop round 1)
+- Loop approved; spec `plans/ux-loop/SPEC.md`, log `plans/ux-loop/runs.md`, backlog `plans/ux-backlog.md` (seeded from the audit).
+- Checks: `evals/check_needs_you.py` (S1, frozen golden set), `evals/test_server.py` (read-only copy on :7718, POSTs stubbed, no threads, no model calls), `evals/walk.mjs` (S2, S3 via CDP on :9223).
+- Round 1 (branch `feat/needs-you-from-reply`): "needs you" now comes from the last reply. `needs_you()` in server.py: waiting status, or an unanswered reply whose worked-out action is action/decision, or (before that action exists) an ask in its text. Actions are worked out for every unanswered reply, not only "waiting" ones. A session that needs you shows as "your turn"; a "waiting" one whose reply asks nothing shows idle. Compaction records no longer count as a new turn; claude-home transcripts are found under the home project folder.
+- S1 3/19 -> 19/19 with 0 false flags; galaxy header 3 -> 18 needs you. S2 and S3 unchanged (2 clicks, 0 asks on the first screen): next items are #2/#3 and the needs-you list.
+- Waiting on Robert: merge the PR and restart the live server; go/no-go on rounds 2-5 (projected above $20).
