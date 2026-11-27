@@ -344,3 +344,11 @@ Review screenshots: `.shots/review-*.png`; after: `.shots/fix-*.png`.
 - Live server restarted on 2334b04 (pid 19971).
 - Waiting on: the round 3 Fable re-audit (`plans/ux-audit-r3.md`, local) to land findings in the backlog.
 - Next: backlog item for the action cache keyed by reply text only (old-rule verdicts persist until a new reply); then #35 (three needs-you counts) and #36 (flagged session with no planet).
+
+## 2026-11-26 (UX loop round 5, merged and live)
+- PR #15 fixes blockers #45 (action cache now keyed by rules hash + reply) and #46 (task notifications and interrupt markers no longer count as Robert's turn). Live page now flags AI PM Grade and Liked AI Stories and leaves Parrots Nest and Jev Router Terminal unflagged.
+- New checks: `evals/check_needs_you.py --live-path`, `evals/test_last_reply.py`. S1 17/17, 1 false of 14; S2 1; S3 17/17; S4 3 / 22.
+- Live server on 1c6aa2f (pid 38555).
+- Still open with Robert: "Tenet Drafts Review" label (in-session no vs main-checkout golden yes).
+- Next: #35 (views give 18 vs 17 for needs you), then #36.
+
