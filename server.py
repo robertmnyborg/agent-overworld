@@ -334,6 +334,13 @@ def needs_you(status, turn_role, action, full):
     return asks_in_text(full)
 
 
+def is_interrupt(e):
+    """Is this user record Claude Code's "[Request interrupted by user...]" marker rather than a prompt?"""
+    c = e.get("message", {}).get("content")
+    text = c if isinstance(c, str) else " ".join(x.get("text", "") for x in c or [] if isinstance(x, dict) and x.get("type") == "text")
+    return text.startswith("[Request interrupted by user")
+
+
 def last_reply(transcript):
     """(last assistant text ~240 chars, last user/assistant turn time, its role, full text of that reply) from a Claude transcript.
     The role is "tool_use" when the newest record is the assistant calling a tool, so the turn is still going."""
@@ -357,10 +364,14 @@ def last_reply(transcript):
             continue
         if e.get("type") not in ("user", "assistant") or e.get("isCompactSummary") or e.get("isMeta"):
             continue  # a compaction summary or injected meta record is not a turn: the reply before it is still unanswered
+        if e["type"] == "user" and (e.get("origin") or {}).get("kind") not in (None, "human", "peer"):
+            continue  # harness-injected text (a background task's notification) is not Robert answering
         if turn_at is None:
             turn_at, turn_role = e.get("timestamp"), e["type"]
             if turn_role == "assistant" and any(isinstance(c, dict) and c.get("type") == "tool_use" for c in e.get("message", {}).get("content", [])):
                 turn_role = "tool_use"  # mid-turn: the newest reply text is not the turn's last word
+            elif turn_role == "user" and is_interrupt(e):
+                turn_role = "assistant"  # Robert stopped the turn: nothing runs, and the last reply text before it waits on him
         if e["type"] != "assistant":
             continue
         parts = [c.get("text", "") for c in e.get("message", {}).get("content", []) if isinstance(c, dict) and c.get("type") == "text"]
@@ -1061,7 +1072,7 @@ def name_batch(workspace_payload):
     return result["structured_output"]["names"], result.get("total_cost_usd") or 0
 
 
-ACTIONS = Path.home() / ".overworld" / "actions.json"  # sha1 of a reply -> what it needs from the user; survives restarts
+ACTIONS = Path.home() / ".overworld" / "actions.json"  # sha1 of rules + reply -> what it needs from the user; survives restarts
 ACTION_SCHEMA = {"type": "object", "required": ["kind", "action", "options"], "properties": {
     "kind": {"type": "string", "enum": ["decision", "action", "none"]},
     "action": {"type": "string"},
@@ -1092,6 +1103,7 @@ say what the user must do or decide so the work moves to the next step.
 - When unsure whether the reply needs the user, pick "action" or "decision", not "none".
 Plain words, no markdown, no quotes, no emoji. Use names and numbers from the reply. Input:
 """
+ACTION_RULES_SHA = hashlib.sha1(ACTION_RULES.encode()).hexdigest()[:12]  # same short hash the golden set records
 _actions = {"cache": None, "lock": threading.Lock(), "busy": set()}
 
 
@@ -1102,7 +1114,8 @@ def _action_cache():
 
 
 def action_key(full):
-    return hashlib.sha1(full.encode()).hexdigest()
+    """Keyed by the classifier rules too, so a rule change re-asks every open reply instead of serving the old verdict."""
+    return hashlib.sha1((ACTION_RULES_SHA + full).encode()).hexdigest()
 
 
 def cached_action(full):
@@ -1144,7 +1157,7 @@ def classify_reply(prompt, reply):
 
 
 def work_out_action(full, prompt):
-    """One headless Haiku call: what this reply needs from the user. Cached by reply text, so each reply costs one call."""
+    """One headless Haiku call: what this reply needs from the user. Cached by rules + reply text, so each reply costs one vote round per rule set."""
     key = action_key(full)
     with _actions["lock"]:
         if key in _action_cache() or key in _actions["busy"]:
@@ -1361,8 +1374,11 @@ def state():
                                   "here": sf.get("selected_in_pane") and pane.get("focused") and ws.get("selected")})
                     t = sessions[-1]
                     t["needs"] = needs_you(t["status"], t["turn_role"], t["action"], t["full"] or (t["recap"] if sess and not t["turn_role"] else ""))
-                    if t["needs"] and t["status"] in ("idle", "done", "working") and alive(sess["pid"]):
-                        t["status"] = "waiting"  # status came from notifications and hook events; the open ask wins
+                    if t["needs"] and t["status"] in ("idle", "done", "working", "shell"):
+                        # status came from notifications, hook events and the process; the open ask wins, so every view counts it.
+                        # An exited agent's ask still needs Robert (resume it), but a reply can't be typed into its tab.
+                        t["exited"] = not (sess and alive(sess["pid"]))
+                        t["status"] = "waiting"
                     elif not t["needs"] and t["status"] == "waiting":
                         t["status"] = "idle"  # its reply was worked out to ask nothing
             if sessions:
@@ -2387,6 +2403,9 @@ class Handler(BaseHTTPRequestHandler):
             cmux("workspace-group", "rename", body["group"], "--name", body["name"])
         elif self.path == "/api/send":
             # Bracketed paste + Enter, so multi-line text arrives as one message. Errors go back to the page.
+            sess = agent_sessions().get(body["surface"])
+            if sess and not alive(sess["pid"]):  # its agent exited: the paste would run as a shell command
+                return self._send(409, {"error": "This session's agent has exited, so the reply would run as a shell command. Open the tab and resume it first."})
             out = subprocess.run([CMUX, "paste", "--workspace", body["workspace"], "--surface", body["surface"], "--submit", "-"],
                                  input=body["text"], capture_output=True, text=True, timeout=10,
                                  env={**os.environ, "CMUX_QUIET": "1"})

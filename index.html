@@ -1280,9 +1280,10 @@ function waitedMs(t) {
   if (Number.isFinite(ms)) return ms;
   return t.updated ? t.updated * 1000 : Date.now();
 }
+function isExited(t) { return !!(t && (t.exited || !t.agent || t.status === "shell")); }
 function effectiveStatus(t) {
   if (!t) return "idle";
-  const ended = !t.agent || t.status === "shell";
+  const ended = isExited(t);
   if (t.needs && !isDismissed(t)) return ended ? "ended" : "waiting";
   if (ended) return "shell";
   if (t.status === "working") {
@@ -1302,8 +1303,8 @@ function needsSessions(includeDismissed = false) {
   return allSessions()
     .filter(t => t.needs && (includeDismissed || !isDismissed(t)))
     .sort((a, b) => {
-      const aEnded = (!a.agent || a.status === "shell") ? 1 : 0;
-      const bEnded = (!b.agent || b.status === "shell") ? 1 : 0;
+      const aEnded = isExited(a) ? 1 : 0;
+      const bEnded = isExited(b) ? 1 : 0;
       if (aEnded !== bEnded) return aEnded - bEnded;
       const aStale = isStaleAsk(a) ? 1 : 0;
       const bStale = isStaleAsk(b) ? 1 : 0;
@@ -1312,7 +1313,11 @@ function needsSessions(includeDismissed = false) {
     });
 }
 function liveNeedsSessions() {
-  return needsSessions(false).filter(t => t.agent && t.status !== "shell");
+  return needsSessions(false).filter(t => !isExited(t));
+}
+function needCountOf(items) {
+  const ids = new Set(needsSessions(false).map(t => t.id));
+  return items.reduce((n, i) => n + (i.tabs || []).filter(id => ids.has(id)).length, 0);
 }
 function isStaleAsk(t) { return Date.now() - waitedMs(t) > STALE_ASK_MS; }
 
@@ -2112,7 +2117,7 @@ function renderTriage(state) {
   const triageSec = el("section");
   triageSec.setAttribute("aria-label", "Sessions needing your attention");
   const bar = el("div", "sec-bar");
-  const liveCnt = activeNeeds.filter(t => t.agent && t.status !== "shell").length;
+  const liveCnt = activeNeeds.filter(t => !isExited(t)).length;
   const endedCnt = activeNeeds.length - liveCnt;
   const h2 = el("h2", "", "Needs you");
   h2.append(el("span", "count-pill" + (liveCnt ? " warm" : ""), String(liveCnt)));
@@ -2650,7 +2655,7 @@ function buildGoalBoard(state) {
     head.append(el("span", "goal-swatch"));
     const titleEl = el("h3", "", g.title);
     head.append(titleEl, el("span", "count-pill", `${mine.length} active`));
-    const needCnt = mine.filter(i => i.needs).length;
+    const needCnt = needCountOf(mine);
     if (needCnt) head.append(el("span", "count-pill warm", `${needCnt} needs you`));
     if (g.id) {
       const ren = el("button", "btn sm icon", "");
@@ -3019,7 +3024,7 @@ function renderLinks(state) {
     const h = el("div", "dtitle"), name = el("span", "name", g ? g.title : "No goal yet");
     h.append(el("span", "goal-swatch"), name);
     box.append(h);
-    const n = mine.filter(i => i.needs).length, open = mine.reduce((s, i) => s + i.tabs.length, 0);
+    const n = needCountOf(mine), open = mine.reduce((s, i) => s + i.tabs.length, 0);
     box.append(el("div", "masked", `${mine.length} item${mine.length === 1 ? "" : "s"} · ${open} open` + (n ? ` · ${n} needs you` : "")));
     box.ondragover = e => { if (draggingItem) { e.preventDefault(); box.classList.add("drop"); } };
     box.ondragleave = () => box.classList.remove("drop");
@@ -3595,7 +3600,7 @@ function gCrumbs() {
   add("Galaxy", G.sys == null && !G.planet ? null : gGoGalaxy, G.sys == null && !G.planet);
   if (G.sys != null) {
     add(G.suns[G.sys] ? G.suns[G.sys].title : "", G.planet ? () => gGoSystem(G.sys) : null, !G.planet);
-    const ps = G.data.planets.filter(p => G.pos[p.id] && G.pos[p.id].sys === G.sys), need = ps.filter(p => p.needs).length;
+    const ps = G.data.planets.filter(p => G.pos[p.id] && G.pos[p.id].sys === G.sys), need = needCountOf(ps);
     if (!G.planet) c.append(el("span", "gcount" + (need ? " alert" : ""), `${ps.filter(p => !p.dormant).length} active${need ? ` · ${need} needs you` : ""}`));
   }
   if (G.planet) { const p = G.data.planets.find(x => x.id === G.planet); add(p ? p.title : "", null, true); }
@@ -3847,7 +3852,7 @@ function gSunPatch() {
   if (!G.wrap) return;
   Object.entries(G.suns).forEach(([id]) => {
     const ps = G.data.planets.filter(p => G.pos[p.id] && G.pos[p.id].sys === id);
-    const need = ps.filter(p => p.needs).length, dorm = ps.filter(p => p.dormant).length;
+    const need = needCountOf(ps), dorm = ps.filter(p => p.dormant).length;
     const g = G.world.querySelector(`.gsys[data-sys="${CSS.escape(id)}"]`); if (!g) return;
     g.classList.toggle("alert", need > 0);
     g.querySelector(".scount").textContent = `${ps.length - dorm} active${need ? ` · ${need} needs you` : ""}`;

@@ -337,10 +337,30 @@ Review screenshots: `.shots/review-*.png`; after: `.shots/fix-*.png`.
 - Robert's second ruling: an optional offer that only repackages finished work (shareable page, Confluence doc, email draft) is FYI. Next steps that move the goal (commit, push, PR) should just happen, with a PR and tagged reviewer when one is needed; that rule went into ~/CLAUDE.md, not the classifier. Fresh classifier run after both rules: 17/18, 0/13 (miss: "Communication harness", which ends on an uncommitted note).
 - Robert's third ruling: finished work left uncommitted is the agent's own next step, not needs-you. "Communication harness skills and hooks" and "Tenet Drafts Review" relabeled no; classifier rule added. Golden kinds refrozen on the new rules (`--refreeze`; labels untouched): S1 16/16, 0/15 false.
 
-## 2026-11-26 (Impeccable UI/UX critique + cockpit overhaul; branch feat/ui-design-40)
+## 2026-11-26 (UX loop rounds 3 and 4, merged and live)
+- Loop rule change from Robert: the agent merges its own PRs once S1-S4 hold, then restarts the live server on main (SPEC.md updated).
+- Round 3 (PR #11): classifier rules on Robert's corrected labels plus a 3-vote Haiku majority (single calls flipped borderline rows). S1 15/17 -> 17/17, 1 false of 14 ("Tenet Drafts Review"; Robert's main-checkout golden copy still says yes, open question).
+- Round 4 (PR #12): Reply opens the reply view from every view; Reply button on each needs-you row. Backlog #3 fixed. S2 1, S3 18/18, S4 3 / 18.
+- Live server restarted on 2334b04 (pid 19971).
+- Waiting on: the round 3 Fable re-audit (`plans/ux-audit-r3.md`, local) to land findings in the backlog.
+- Next: backlog item for the action cache keyed by reply text only (old-rule verdicts persist until a new reply); then #35 (three needs-you counts) and #36 (flagged session with no planet).
+
+## 2026-11-26 (UX loop round 5, merged and live)
+- PR #15 fixes blockers #45 (action cache now keyed by rules hash + reply) and #46 (task notifications and interrupt markers no longer count as Robert's turn). Live page now flags AI PM Grade and Liked AI Stories and leaves Parrots Nest and Jev Router Terminal unflagged.
+- New checks: `evals/check_needs_you.py --live-path`, `evals/test_last_reply.py`. S1 17/17, 1 false of 14; S2 1; S3 17/17; S4 3 / 22.
+- Live server on 1c6aa2f (pid 38555).
+- Still open with Robert: "Tenet Drafts Review" label (in-session no vs main-checkout golden yes).
+- Next: #35 (views give 18 vs 17 for needs you), then #36.
+
+## 2026-11-26 (UX loop round 6, merged and live)
+- PR #17 fixes blocker #35: every needs-you count is the same set of sessions (19 live in every view). Exited agents with an open ask show as waiting with an "agent exited" note, and `/api/send` refuses their tabs so a reply can't run as a shell command.
+- Live server on 3d11381 (pid 53181). S4 2 / 22.
+- Next: #36 (a needs-you session on no work item has no planet: Liked AI Stories today), then #2.
+
+## 2026-11-26 (Impeccable UI/UX critique + cockpit overhaul; PR #19)
 - Updated Impeccable skill to v4.11.1 (`npx impeccable update`), added `PRODUCT.md` and `.impeccable/config.json` (`buildPath: "code"`), and recorded the baseline dual-agent audit in `plans/ux-audit-ui-2026-11-26.md` (local only; baseline score **15/40**).
-- Rebuilt `index.html` into a unified dark cockpit:
-  - **Triage default view (`1`/`t`):** Prioritized 2-column `Needs you` queue (recent <24h asks first, ended shells clearly marked `Ended` with `Resume` instead of broken Reply, `Dismiss` + `Dismiss older` with Undo toast, 2-click armed inline decision option chips) above a unified `By workspace | By goal` board with full readable titles, compact counts, and collapsed dormant/capture folds.
+- Rebuilt `index.html` into a unified dark cockpit (integrating PR #17's `t.exited` flag and session-level `needCountOf` tallies):
+  - **Triage default view (`1`/`t`):** Prioritized 2-column `Needs you` queue (recent <24h asks first, exited agents clearly marked `Ended` with `Resume` instead of broken Reply, `Dismiss` + `Dismiss older` with Undo toast, 2-click armed inline decision option chips) above a unified `By workspace | By goal` board with full readable titles, compact counts, and collapsed dormant/capture folds.
   - **Universal Session Sheet:** Merged Reply + 5-tab Turn Diagnostics (`Timeline`, `Waterfall`, `Agents`, `Context`, `Handoffs`) reachable from every view with preserved Reply drafts across tab switches, disabled empty Send, explicit `Open tab` / `Dock beside` / `Dismiss` / `Close`, and fixed `span()` collision (`fmtSpan()` vs `spanBetween()`).
   - **Links (`2`/`w`) & Galaxy (`3`/`g`):** Responsive 900px split-pane support (`52px` single-row header, `0px` horizontal overflow across all views), muted Links wires until hover, uncluttered Galaxy without permanent `.gneeds` rail (optional drawer at all widths), dynamic collision-free system/planet/history-date labels (`0` SVG collisions at 1440px and 900px), fixed 0px search dropdown, `gStop()` cleanup on view switch, 2-click arming on destructive/LLM controls (`Park`, `Auto-name`, `Regroup`, `Sort`), global `/` search covering live sessions + dormant items, `?` shortcuts modal with focus trapping/restoration, and non-destructive poll error banner.
 - Verified on read-only test server (`:7721`) via `impeccable detect --json` (`[]`, exit 0), `evals/walk.mjs` (`S2 = 1` click, `S3 = 18/20` above fold), automated Chrome CDP measurements at `1440x900` and `900x900` (`0` console errors, `0` visible WCAG AA contrast failures, `0` horizontal overflow, `0` SVG collisions), and a second independent dual-agent re-critique (score jumped `15/40 -> 28/40` on pass 1, followed by fixing all 6 remaining pass-1 findings in pass 2).
