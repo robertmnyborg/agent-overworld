@@ -39,7 +39,7 @@ Order: blockers first, then audit rank. S4 counts open blockers / majors. Full w
 | 32 | minor | open | The reply view has no "Open tab" button | audit 2026-11-25 |
 | 33 | minor | open | Card titles cut off at about 17 characters ("Cheap Model R...", "Stone Ridge D...") while the status text takes the rest of the row | audit 2026-11-25 |
 | 34 | minor | open | Five Esc handlers run on one keypress | audit 2026-11-25 |
-| 35 | blocker | open (r3 audit: list and header 18; Inbox, Tabs view, button, planets, Work view 17, dropping Founder Scorecard Rewrite, status shell) | Views give three numbers for "needs you" | r2 audit |
+| 35 | blocker | fixed r6 (PR #17): header, list, button, Work view, Tabs view and Inbox all count needs-you sessions (19 live); exited agents count as waiting with an "agent exited" note | Views give three numbers for "needs you" | r2 audit |
 | 36 | blocker | open (r3 audit: not visible today, HubSpot Cleanup Proposal now sits on an item; the code gap is unchanged) | A flagged session on no work item has no planet ("HubSpot Cleanup Proposal") | r2 audit |
 | 37 | major | open | A session whose agent ended (shell) is flagged in the galaxy only; a reply would reach a plain shell | r2 audit |
 | 38 | major | open (r2: the list shows both tabs as rows; the item panel still shows one) | An item with two asking sessions shows one ask and counts once | r2 audit |
