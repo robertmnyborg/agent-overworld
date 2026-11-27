@@ -8,6 +8,7 @@ Checks: `python3 evals/check_needs_you.py` (S1), `node evals/walk.mjs` against `
 | baseline | 2026-11-26 | (main) | | 3/19, 0 false | 2 + Cmd-1 | 0 asks | 3 / 16 | |
 | 1 | 2026-11-26 | #1 needs you from the last reply | [#8](https://github.com/robertmnyborg/agent-overworld/pull/8) | 19/19, 0 false (live: same) | 2 | 0/20 | 2 / 16 | $3.19 (ccusage, session 1abe41a4, includes writing the checks) |
 | 2 | 2026-11-26 | #2/#7 needs-you list on the first screen | [#9](https://github.com/robertmnyborg/agent-overworld/pull/9) | 19/19, 0 false | 1 | 20/20 | 2 / 15 before the r2 audit; 4 / 19 after it added 9 findings | $4.37 (ccusage, session total $7.56 minus round 1; Fable audit not included yet) |
+| 3 | 2026-11-26 | #44 needs-you rules on Robert's corrected labels | [#11](https://github.com/robertmnyborg/agent-overworld/pull/11) | 17/17, 1 false of 14 (3 reclassify runs: 0, 0, 1) | 1 | 18/18 | 4 / 18 | $1.94 (ccusage, session b71422ef; Haiku eval calls not counted, Fable audit not included) |
 
 ## Round 1 notes
 - Audit step: the 2026-11-25 audit seeded the backlog; the first Fable re-audit runs in round 2, after this PR is live, so it audits the change.
@@ -22,3 +23,17 @@ Checks: `python3 evals/check_needs_you.py` (S1), `node evals/walk.mjs` against `
 - walk.mjs S3 now ignores text scrolled out of view inside a scrolling list; before the fix the check would have passed rows hidden below the fold.
 - 20 rows fit at 1440x900. With more than about 20 the list scrolls and S3 will drop; not checked at 900x900.
 - Fable re-audit (on the round 1 code, :7718): 9 new findings, 35 to 43 (2 blockers, 5 major, 2 minor), now in the backlog. Round 2 already fixes #41 and part of #35, #36, #38 and #40. Finding 39 says "Parrots Nest" is a false flag, but the golden set labels it yes; only Robert can change that label.
+
+## Label corrections (2026-11-26, before round 3)
+- Robert corrected the 10 borderline labels (`~/.overworld/handoffs/2026-11-26-overworld-ux-loop-labels.md`) and earlier in session ruled "Tenet Drafts Review" no (uncommitted finished work). Golden set: 17 yes of 31.
+- S1 on the corrected labels, current rules, refrozen kinds: 15/17 caught, 1/14 false flags. Target missed.
+  - Missed "AI PM Grade": stalled work that can't resume needs him. The classifier says nothing needed.
+  - Missed "Liked AI Stories": now yes. This contradicts the round 3 rule that repackaging offers are FYI; round 3 must undo that rule.
+  - False flag "Jev Router Terminal": the agent could take the screenshot itself.
+
+## Round 3 notes
+- Rules changed in `ACTION_RULES`: removed "repackaging offers are FYI"; added stalled work = action (including a reply that announces work then ends), checks the agent's own tools can do = none (even "I can't see your screen"), the agent offering more work = decision (but not an offer to undo a small side effect), advice naming a step only Robert can take = action, and "when unsure, flag".
+- One Haiku call per reply flipped borderline rows between runs: on the same rules, single runs gave 0 to 2 false flags and once missed a yes. The classifier now takes 3 parallel votes and keeps the majority; with no majority it flags. Cost goes from 1 to 3 Haiku calls per new reply. A failed vote is logged and dropped; all 3 failing still raises.
+- The frozen run's one false flag is "Tenet Drafts Review", the label still open with Robert (his main-checkout copy says yes).
+- S2/S3 walk first returned 0 sessions because the test server was started inside the sandbox and could not reach cmux; restarted outside it.
+- S4 majors 19 -> 18 (#44 fixed). The 4-major target is still far off; that's the backlog's job, not this round's.

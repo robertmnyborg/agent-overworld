@@ -48,6 +48,6 @@ Order: blockers first, then audit rank. S4 counts open blockers / majors. Full w
 | 41 | major | fixed r2: needs-you list with every ask on the first screen | First screen shows 18 amber names, 0 of 20 asks, overlapping labels | r2 audit |
 | 42 | minor | open | Decisions' ready answers show only in the Inbox after a row click | r2 audit |
 | 43 | minor | open | 4 of 19 asks cut off at two lines on Tabs view cards | r2 audit |
-| 44 | major | fixed r3: both misses were uncommitted-work rows Robert ruled are not needs-you; kinds refrozen, S1 16/16, 0/15 | Frozen kinds pass; live kinds drift. A replied-to cache hides it until the reply text changes | r3 reclassify check |
+| 44 | major | fixed r3: new rules (stalled = action, own-tool checks = none, offers = decision) + 3-vote majority; S1 17/17, 0-1/14 over 3 runs | Frozen kinds pass; live kinds drift. A replied-to cache hides it until the reply text changes | r3 reclassify check |
 
-Open: 4 blockers, 19 major, 17 minor.
+Open: 4 blockers, 18 major, 17 minor.
