@@ -6,3 +6,4 @@ __pycache__/
 # UX loop data with verbatim session text: local only (public repo)
 evals/needs-you-golden.jsonl
 plans/ux-audit-*.md
+.impeccable/critique/
