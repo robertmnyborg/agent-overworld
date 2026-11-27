@@ -39,15 +39,23 @@ Order: blockers first, then audit rank. S4 counts open blockers / majors. Full w
 | 32 | minor | open | The reply view has no "Open tab" button | audit 2026-11-25 |
 | 33 | minor | open | Card titles cut off at about 17 characters ("Cheap Model R...", "Stone Ridge D...") while the status text takes the rest of the row | audit 2026-11-25 |
 | 34 | minor | open | Five Esc handlers run on one keypress | audit 2026-11-25 |
-| 35 | blocker | open (r2: header and list both say 20; Tabs view and Inbox say 19, planets and the "Needs you" button count 18 items) | Views give three numbers for "needs you" | r2 audit |
-| 36 | blocker | open (r2: the session shows in the needs-you list; still no planet, not in search) | A flagged session on no work item has no planet ("HubSpot Cleanup Proposal") | r2 audit |
+| 35 | blocker | open (r3 audit: list and header 18; Inbox, Tabs view, button, planets, Work view 17, dropping Founder Scorecard Rewrite, status shell) | Views give three numbers for "needs you" | r2 audit |
+| 36 | blocker | open (r3 audit: not visible today, HubSpot Cleanup Proposal now sits on an item; the code gap is unchanged) | A flagged session on no work item has no planet ("HubSpot Cleanup Proposal") | r2 audit |
 | 37 | major | open | A session whose agent ended (shell) is flagged in the galaxy only; a reply would reach a plain shell | r2 audit |
 | 38 | major | open (r2: the list shows both tabs as rows; the item panel still shows one) | An item with two asking sessions shows one ask and counts once | r2 audit |
-| 39 | major | fixed r3: Robert ruled session nudges and repackaging offers after finished work are FYI; Parrots Nest relabeled, classifier rules added. Fresh run 0/13 false | 1 clear false flag (a /spinoff session-size note) and 3 weak ones (optional offers) | r2 audit |
+| 39 | major | fixed in code r3, not live: cached verdicts keep the old rules (#45) | 1 clear false flag (a /spinoff session-size note) and 3 weak ones (optional offers) | r2 audit |
 | 40 | major | open (r2: list sorts by longest wait and falls back to cmux's update time for the age) | Asks come with no order; 10 of 20 show no waiting age; decision and chore look alike | r2 audit |
 | 41 | major | fixed r2: needs-you list with every ask on the first screen | First screen shows 18 amber names, 0 of 20 asks, overlapping labels | r2 audit |
 | 42 | minor | open | Decisions' ready answers show only in the Inbox after a row click | r2 audit |
 | 43 | minor | open | 4 of 19 asks cut off at two lines on Tabs view cards | r2 audit |
-| 44 | major | fixed r3: new rules (stalled = action, own-tool checks = none, offers = decision) + 3-vote majority; S1 17/17, 0-1/14 over 3 runs | Frozen kinds pass; live kinds drift. A replied-to cache hides it until the reply text changes | r3 reclassify check |
+| 44 | major | fixed in code r3 (S1 17/17, 1/14 on the frozen set), not live: cached verdicts keep the old rules (#45) | Frozen kinds pass; live kinds drift. A replied-to cache hides it until the reply text changes | r3 reclassify check |
+| 45 | blocker | open | A rule change never reaches a cached verdict: the cache key is the reply text alone, so old-rule verdicts stay (Parrots Nest, Jev Router Terminal, Communication harness stay flagged) | r3 audit |
+| 46 | blocker | open | A harness record after the reply (task notification, "[Request interrupted by user]") counts as Robert's turn, so AI PM Grade and Liked AI Stories are never flagged; S1 cannot see it because it forces the last turn to the agent's | r3 audit |
+| 47 | major | open | Every ask on the needs-you list is one line cut at about 62 characters; decisions lose their choices; full text only in a tooltip | r3 audit |
+| 48 | major | open | 11 of 18 ages say "5d" (the cmux relaunch); real waits are 6.5 to 47 days, so "longest wait first" is wrong for 61% of rows | r3 audit |
+| 49 | major | open | Typing in search pushes the search box under the needs-you list and hides the left edge of the results; search finds no tab titles | r3 audit |
+| 50 | major | open | Two queues: the list (by session, by wait) and the "Needs you" button and n key (by item, by goal) have different names and counts; a row click leads to a panel whose filled button is "Show beside map" | r3 audit |
+| 51 | minor | open | The needs-you list has no keyboard path and no ready-answer buttons for decisions with options | r3 audit |
+| 52 | minor | open | A compacted session shows the compaction notice as its recap | r3 audit |
 
-Open: 3 blockers, 18 major, 17 minor.
+Open: 5 blockers, 22 major, 19 minor.
