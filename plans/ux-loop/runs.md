@@ -9,6 +9,7 @@ Checks: `python3 evals/check_needs_you.py` (S1), `node evals/walk.mjs` against `
 | 1 | 2026-11-26 | #1 needs you from the last reply | [#8](https://github.com/robertmnyborg/agent-overworld/pull/8) | 19/19, 0 false (live: same) | 2 | 0/20 | 2 / 16 | $3.19 (ccusage, session 1abe41a4, includes writing the checks) |
 | 2 | 2026-11-26 | #2/#7 needs-you list on the first screen | [#9](https://github.com/robertmnyborg/agent-overworld/pull/9) | 19/19, 0 false | 1 | 20/20 | 2 / 15 before the r2 audit; 4 / 19 after it added 9 findings | $4.37 (ccusage, session total $7.56 minus round 1; Fable audit not included yet) |
 | 3 | 2026-11-26 | #44 needs-you rules on Robert's corrected labels | [#11](https://github.com/robertmnyborg/agent-overworld/pull/11) | 17/17, 1 false of 14 (3 reclassify runs: 0, 0, 1) | 1 | 18/18 | 4 / 18 | $1.94 (ccusage, session b71422ef; Haiku eval calls not counted, Fable audit not included) |
+| 4 | 2026-11-26 | #3 Reply from any view | PR_URL | 17/17, 1 false of 14 | 1 | 18/18 | 3 / 18 (before the r3 audit's findings) | in round 3's session total |
 
 ## Round 1 notes
 - Audit step: the 2026-11-25 audit seeded the backlog; the first Fable re-audit runs in round 2, after this PR is live, so it audits the change.
@@ -37,3 +38,7 @@ Checks: `python3 evals/check_needs_you.py` (S1), `node evals/walk.mjs` against `
 - The frozen run's one false flag is "Tenet Drafts Review", the label still open with Robert (his main-checkout copy says yes).
 - S2/S3 walk first returned 0 sessions because the test server was started inside the sandbox and could not reach cmux; restarted outside it.
 - S4 majors 19 -> 18 (#44 fixed). The 4-major target is still far off; that's the backlog's job, not this round's.
+
+## Round 4 notes
+- Cause of #3: `openReply` returned early unless a Tabs-view card was on the page. It now builds from the session record; "next" and the waiting count come from the needs-you list when there are no cards.
+- Each needs-you row has Reply (outlined) next to Open. Checked on a :7719 stubbed copy with 0 cards on the page: row Reply opens the view, Tab moves to the next session, Esc closes; Inbox row Reply opens it too (it did nothing before).

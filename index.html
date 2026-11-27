@@ -535,6 +535,7 @@
   .gneeds .gnitem { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1 1 0; min-width: 0; }
   .gneeds .gnage { color: var(--muted); flex: none; }
   .gneeds .gnopen { flex: none; background: var(--waiting); color: var(--bg); border: 0; border-radius: 4px; font: inherit; font-weight: 600; padding: 0 8px; cursor: pointer; }
+  .gneeds .gnreply { flex: none; background: none; color: var(--waiting); border: 1px solid var(--waiting); border-radius: 4px; font: inherit; font-weight: 600; padding: 0 7px; cursor: pointer; }
   .gneeds .gnask { font-size: 12px; line-height: 15px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .gsearch { position: absolute; top: 54px; left: 16px; display: flex; gap: 8px; align-items: center; z-index: 2; }
   .gsearch input { width: 260px; background: rgba(18,19,26,.9); border: 1px solid var(--line); border-radius: 8px; color: var(--text); font: inherit; padding: 6px 10px; outline: none; }
@@ -708,12 +709,20 @@ function neighbor(from, [dx, dy]) {
   }
   return best;
 }
-// Next "your turn" card after `from` in map order (wrapping), skipping sessions already answered in this pass.
+// Sessions in order, and which of them are "your turn": the Tabs view's cards when they are on the page, else (galaxy,
+// Work view) the needs-you list's sessions, longest wait first, so the reply view works from every view.
+function replyOrder() {
+  const cs = cards();
+  if (cs.length) return { all: cs.map(c => c.dataset.id), waiting: cs.filter(c => c.classList.contains("waiting")).map(c => c.dataset.id) };
+  const ids = gNeedsSessions().map(t => t.id);
+  return { all: ids, waiting: ids };
+}
+// Next "your turn" session after `from` (wrapping), skipping sessions already answered in this pass.
 function nextWaiting(from) {
-  const list = cards().filter(c => c.classList.contains("waiting") && !sent.has(c.dataset.id));
+  const { all, waiting } = replyOrder(), list = waiting.filter(id => !sent.has(id));
   if (!list.length) return null;
-  const all = cards(), at = all.findIndex(c => c.dataset.id === from);
-  return (list.find(c => all.indexOf(c) > at) || list[0]).dataset.id;
+  const at = all.indexOf(from);
+  return list.find(id => all.indexOf(id) > at) || list[0];
 }
 const typing = e => e.metaKey || e.ctrlKey || e.altKey || editing || ["INPUT", "TEXTAREA"].includes(e.target.tagName);
 document.addEventListener("keydown", e => {
@@ -811,12 +820,13 @@ function markdown(src) {
 // in the next one. Tab skips to the next "your turn" session, Shift+Enter is a new line, Esc or a click outside closes.
 // Renders pause while it is open.
 function openReply(id) {
-  const t = sessionById(id), card = cards().find(c => c.dataset.id === id);
-  if (!t || !card || !t.agent) return;
+  const t = sessionById(id);
+  if (!t || !t.agent) return;
   document.getElementById("peek")?.remove();
   editing = true;
-  const left = cards().filter(c => c.classList.contains("waiting") && !sent.has(c.dataset.id)).length;
-  const inbox = card.classList.contains("waiting");
+  const waiting = replyOrder().waiting;
+  const left = waiting.filter(w => !sent.has(w)).length;
+  const inbox = waiting.includes(id);
   const back = el("div"), panel = el("div", "peek-panel"), head = el("div", "row"), msg = el("div", "peek-msg");
   msg.append(t.full ? markdown(t.full) : el("p", null, t.recap || "(no reply yet)"));
   back.id = "peek";
@@ -1923,7 +1933,13 @@ function gNeedsList() {
     open.dataset.walk = "open-need";
     open.title = `Go to this tab in ${t.ws_title || "its workspace"}`;
     open.onclick = e => { e.stopPropagation(); post("/api/focus", { workspace: t.workspace, surface: t.id }); };
-    top.append(el("b", "", t.title), el("span", "gnitem", item && item.title !== t.title ? "· " + item.title : ""), el("span", "gnage", ago(new Date(gWaitedFrom(t)).toISOString())), open);
+    const reply = el("button", "gnreply", "Reply");
+    reply.dataset.walk = "reply-need";
+    reply.title = "Read the full reply and answer it here";
+    reply.onclick = e => { e.stopPropagation(); openReply(t.id); };
+    top.append(el("b", "", t.title), el("span", "gnitem", item && item.title !== t.title ? "· " + item.title : ""), el("span", "gnage", ago(new Date(gWaitedFrom(t)).toISOString())));
+    if (t.agent) top.append(reply);
+    top.append(open);
     row.append(top, el("div", "gnask", ask));
     row.title = ask + (item ? "\n\nClick to show its item on the map" : "");
     if (item) row.onclick = () => gOpenPlanet(item.id);
