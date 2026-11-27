@@ -336,3 +336,11 @@ Review screenshots: `.shots/review-*.png`; after: `.shots/fix-*.png`.
 - `evals/check_needs_you.py --reclassify` re-runs the current classifier on the golden replies (one Haiku call per row, no cache). New rules: 16/18, 1/13. Old rules: 16/18, 2/13. The 2 misses and 1 false flag are on both, logged as backlog #44.
 - Robert's second ruling: an optional offer that only repackages finished work (shareable page, Confluence doc, email draft) is FYI. Next steps that move the goal (commit, push, PR) should just happen, with a PR and tagged reviewer when one is needed; that rule went into ~/CLAUDE.md, not the classifier. Fresh classifier run after both rules: 17/18, 0/13 (miss: "Communication harness", which ends on an uncommitted note).
 - Robert's third ruling: finished work left uncommitted is the agent's own next step, not needs-you. "Communication harness skills and hooks" and "Tenet Drafts Review" relabeled no; classifier rule added. Golden kinds refrozen on the new rules (`--refreeze`; labels untouched): S1 16/16, 0/15 false.
+
+## 2026-11-26 (UX loop rounds 3 and 4, merged and live)
+- Loop rule change from Robert: the agent merges its own PRs once S1-S4 hold, then restarts the live server on main (SPEC.md updated).
+- Round 3 (PR #11): classifier rules on Robert's corrected labels plus a 3-vote Haiku majority (single calls flipped borderline rows). S1 15/17 -> 17/17, 1 false of 14 ("Tenet Drafts Review"; Robert's main-checkout golden copy still says yes, open question).
+- Round 4 (PR #12): Reply opens the reply view from every view; Reply button on each needs-you row. Backlog #3 fixed. S2 1, S3 18/18, S4 3 / 18.
+- Live server restarted on 2334b04 (pid 19971).
+- Waiting on: the round 3 Fable re-audit (`plans/ux-audit-r3.md`, local) to land findings in the backlog.
+- Next: backlog item for the action cache keyed by reply text only (old-rule verdicts persist until a new reply); then #35 (three needs-you counts) and #36 (flagged session with no planet).
