@@ -43,14 +43,14 @@ Order: blockers first, then audit rank. S4 counts open blockers / majors. Full w
 | 36 | blocker | open (r3 audit: not visible today, HubSpot Cleanup Proposal now sits on an item; the code gap is unchanged) | A flagged session on no work item has no planet ("HubSpot Cleanup Proposal") | r2 audit |
 | 37 | major | open | A session whose agent ended (shell) is flagged in the galaxy only; a reply would reach a plain shell | r2 audit |
 | 38 | major | open (r2: the list shows both tabs as rows; the item panel still shows one) | An item with two asking sessions shows one ask and counts once | r2 audit |
-| 39 | major | fixed in code r3, not live: cached verdicts keep the old rules (#45) | 1 clear false flag (a /spinoff session-size note) and 3 weak ones (optional offers) | r2 audit |
+| 39 | major | fixed r3, live r5 (#45 fixed) | 1 clear false flag (a /spinoff session-size note) and 3 weak ones (optional offers) | r2 audit |
 | 40 | major | open (r2: list sorts by longest wait and falls back to cmux's update time for the age) | Asks come with no order; 10 of 20 show no waiting age; decision and chore look alike | r2 audit |
 | 41 | major | fixed r2: needs-you list with every ask on the first screen | First screen shows 18 amber names, 0 of 20 asks, overlapping labels | r2 audit |
 | 42 | minor | open | Decisions' ready answers show only in the Inbox after a row click | r2 audit |
 | 43 | minor | open | 4 of 19 asks cut off at two lines on Tabs view cards | r2 audit |
-| 44 | major | fixed in code r3 (S1 17/17, 1/14 on the frozen set), not live: cached verdicts keep the old rules (#45) | Frozen kinds pass; live kinds drift. A replied-to cache hides it until the reply text changes | r3 reclassify check |
-| 45 | blocker | open | A rule change never reaches a cached verdict: the cache key is the reply text alone, so old-rule verdicts stay (Parrots Nest, Jev Router Terminal, Communication harness stay flagged) | r3 audit |
-| 46 | blocker | open | A harness record after the reply (task notification, "[Request interrupted by user]") counts as Robert's turn, so AI PM Grade and Liked AI Stories are never flagged; S1 cannot see it because it forces the last turn to the agent's | r3 audit |
+| 44 | major | fixed r3 (S1 17/17, 1/14 on the frozen set), live r5 (#45 fixed) | Frozen kinds pass; live kinds drift. A replied-to cache hides it until the reply text changes | r3 reclassify check |
+| 45 | blocker | fixed r5 (PR #15): cache key is the rules hash + reply; live Parrots Nest and Jev Router Terminal now none, unflagged | A rule change never reaches a cached verdict: the cache key is the reply text alone, so old-rule verdicts stay (Parrots Nest, Jev Router Terminal, Communication harness stay flagged) | r3 audit |
+| 46 | blocker | fixed r5 (PR #15): task notifications skipped, an interrupt ends the turn; live AI PM Grade and Liked AI Stories flagged; `check_needs_you.py --live-path` covers it | A harness record after the reply (task notification, "[Request interrupted by user]") counts as Robert's turn, so AI PM Grade and Liked AI Stories are never flagged; S1 cannot see it because it forces the last turn to the agent's | r3 audit |
 | 47 | major | open | Every ask on the needs-you list is one line cut at about 62 characters; decisions lose their choices; full text only in a tooltip | r3 audit |
 | 48 | major | open | 11 of 18 ages say "5d" (the cmux relaunch); real waits are 6.5 to 47 days, so "longest wait first" is wrong for 61% of rows | r3 audit |
 | 49 | major | open | Typing in search pushes the search box under the needs-you list and hides the left edge of the results; search finds no tab titles | r3 audit |

@@ -10,6 +10,7 @@ Checks: `python3 evals/check_needs_you.py` (S1), `node evals/walk.mjs` against `
 | 2 | 2026-11-26 | #2/#7 needs-you list on the first screen | [#9](https://github.com/robertmnyborg/agent-overworld/pull/9) | 19/19, 0 false | 1 | 20/20 | 2 / 15 before the r2 audit; 4 / 19 after it added 9 findings | $4.37 (ccusage, session total $7.56 minus round 1; Fable audit not included yet) |
 | 3 | 2026-11-26 | #44 needs-you rules on Robert's corrected labels | [#11](https://github.com/robertmnyborg/agent-overworld/pull/11) | 17/17, 1 false of 14 (3 reclassify runs: 0, 0, 1) | 1 | 18/18 | 4 / 18 | $1.94 (ccusage, session b71422ef; Haiku eval calls not counted, Fable audit not included) |
 | 4 | 2026-11-26 | #3 Reply from any view | [#12](https://github.com/robertmnyborg/agent-overworld/pull/12) | 17/17, 1 false of 14 | 1 | 18/18 | 3 / 18 (before the r3 audit's findings) | in round 3's session total |
+| 5 | 2026-11-26 | #45/#46 live verdicts match frozen S1 | [#15](https://github.com/robertmnyborg/agent-overworld/pull/15) | 17/17, 1 false of 14 (live path: 28 rows on their frozen reply, 0 missed, 1 false) | 1 | 17/17 | 3 / 22 | not measured (ccusage had no row for session 9b15a6dd yet); live re-ask of open replies $0.04 Haiku |
 
 ## Round 1 notes
 - Audit step: the 2026-11-25 audit seeded the backlog; the first Fable re-audit runs in round 2, after this PR is live, so it audits the change.
@@ -47,3 +48,9 @@ Checks: `python3 evals/check_needs_you.py` (S1), `node evals/walk.mjs` against `
 - Report `plans/ux-audit-r3.md` (local). 8 new findings, 45 to 52: 2 blockers, 4 major, 2 minor. S4 after it: 5 blockers / 22 majors (round 4 had already fixed #3, which the audit saw on the round 3 code).
 - #45 and #46 mean the live page still misses or over-flags sessions the frozen S1 says are right: cached verdicts ignore rule changes, and a harness record after a reply (task notification, interrupt marker) counts as Robert's turn. S1 forces the last turn to the agent's, so it can't see #46. Both are next, ahead of #35.
 - The audit's own S1 run (16/18, 3/13) used the main checkout's older golden copy, not the round 3 labels.
+
+## Round 5 notes
+- #46: `last_reply()` skips user records whose `origin.kind` is set and not human or peer (task notifications). An "[Request interrupted by user]" record ends the turn with the reply before it unanswered. Older transcripts carry no `origin`, so a prompt without one still counts as Robert's.
+- #45: the action cache key is sha1(rules hash + reply). Every open reply was re-asked once on restart (22 votes rounds in the first minutes, $0.04). Old rows stay in `actions.json`, unused.
+- New checks: `check_needs_you.py --live-path` (main: 2 missed, AI PM Grade and Liked AI Stories; branch: 0) and `evals/test_last_reply.py` (synthetic, fails on main).
+- Live on 1c6aa2f (pid 38555): AI PM Grade action, Liked AI Stories decision, both flagged; Parrots Nest and Jev Router Terminal none, unflagged.
