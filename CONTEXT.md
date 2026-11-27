@@ -352,3 +352,8 @@ Review screenshots: `.shots/review-*.png`; after: `.shots/fix-*.png`.
 - Still open with Robert: "Tenet Drafts Review" label (in-session no vs main-checkout golden yes).
 - Next: #35 (views give 18 vs 17 for needs you), then #36.
 
+## 2026-11-26 (UX loop round 6, merged and live)
+- PR #17 fixes blocker #35: every needs-you count is the same set of sessions (19 live in every view). Exited agents with an open ask show as waiting with an "agent exited" note, and `/api/send` refuses their tabs so a reply can't run as a shell command.
+- Live server on 3d11381 (pid 53181). S4 2 / 22.
+- Next: #36 (a needs-you session on no work item has no planet: Liked AI Stories today), then #2.
+

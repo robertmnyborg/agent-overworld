@@ -11,6 +11,7 @@ Checks: `python3 evals/check_needs_you.py` (S1), `node evals/walk.mjs` against `
 | 3 | 2026-11-26 | #44 needs-you rules on Robert's corrected labels | [#11](https://github.com/robertmnyborg/agent-overworld/pull/11) | 17/17, 1 false of 14 (3 reclassify runs: 0, 0, 1) | 1 | 18/18 | 4 / 18 | $1.94 (ccusage, session b71422ef; Haiku eval calls not counted, Fable audit not included) |
 | 4 | 2026-11-26 | #3 Reply from any view | [#12](https://github.com/robertmnyborg/agent-overworld/pull/12) | 17/17, 1 false of 14 | 1 | 18/18 | 3 / 18 (before the r3 audit's findings) | in round 3's session total |
 | 5 | 2026-11-26 | #45/#46 live verdicts match frozen S1 | [#15](https://github.com/robertmnyborg/agent-overworld/pull/15) | 17/17, 1 false of 14 (live path: 28 rows on their frozen reply, 0 missed, 1 false) | 1 | 17/17 | 3 / 22 | not measured (ccusage had no row for session 9b15a6dd yet); live re-ask of open replies $0.04 Haiku |
+| 6 | 2026-11-26 | #35 one needs-you count | [#17](https://github.com/robertmnyborg/agent-overworld/pull/17) | 17/17, 1 false of 14 (live path 0 missed) | 1 | 19/19 | 2 / 22 | in round 5's session |
 
 ## Round 1 notes
 - Audit step: the 2026-11-25 audit seeded the backlog; the first Fable re-audit runs in round 2, after this PR is live, so it audits the change.
@@ -54,3 +55,10 @@ Checks: `python3 evals/check_needs_you.py` (S1), `node evals/walk.mjs` against `
 - #45: the action cache key is sha1(rules hash + reply). Every open reply was re-asked once on restart (22 votes rounds in the first minutes, $0.04). Old rows stay in `actions.json`, unused.
 - New checks: `check_needs_you.py --live-path` (main: 2 missed, AI PM Grade and Liked AI Stories; branch: 0) and `evals/test_last_reply.py` (synthetic, fails on main).
 - Live on 1c6aa2f (pid 38555): AI PM Grade action, Liked AI Stories decision, both flagged; Parrots Nest and Jev Router Terminal none, unflagged.
+
+## Round 6 notes
+- #35 had two causes: the Inbox and Tabs view counted status "waiting", which an exited agent never got (status "shell"); the button, Work view and goal subtitles counted work items, so an item with two asks counted once.
+- An exited agent with an open ask is now status waiting plus `exited: true`; its card says "agent exited: open and resume it". Every tally counts sessions.
+- Found while doing it: round 4's Reply on needs-you rows would paste a reply into a bare zsh prompt for an exited agent (2 live sessions). `/api/send` now returns 409 for those tabs.
+- Goal subtitles sum to 18 of 19: Liked AI Stories is on no work item. That is #36.
+
