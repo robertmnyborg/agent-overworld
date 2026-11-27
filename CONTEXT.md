@@ -326,3 +326,7 @@ Review screenshots: `.shots/review-*.png`; after: `.shots/fix-*.png`.
 - Round 1 (branch `feat/needs-you-from-reply`): "needs you" now comes from the last reply. `needs_you()` in server.py: waiting status, or an unanswered reply whose worked-out action is action/decision, or (before that action exists) an ask in its text. Actions are worked out for every unanswered reply, not only "waiting" ones. A session that needs you shows as "your turn"; a "waiting" one whose reply asks nothing shows idle. Compaction records no longer count as a new turn; claude-home transcripts are found under the home project folder.
 - S1 3/19 -> 19/19 with 0 false flags; galaxy header 3 -> 18 needs you. S2 and S3 unchanged (2 clicks, 0 asks on the first screen): next items are #2/#3 and the needs-you list.
 - Waiting on Robert: merge the PR and restart the live server; go/no-go on rounds 2-5 (projected above $20).
+
+## 2026-11-26 (UX loop round 2)
+- Branch `feat/needs-you-list` (stacked on round 1): "Needs you" list on the galaxy's first screen with the ask and a one-click Open per session; header count = sessions that need you. S2 2 -> 1 click, S3 0 -> 20/20.
+- Round 2 Fable re-audit ran against the round 1 code on a :7718 test copy (PR #8 not merged yet); its findings go to `plans/ux-audit-r2.md` (local) and the backlog.

@@ -497,6 +497,7 @@
   .gsvg.insys .gplanet.away, .gsvg.insys .gsys.away, .gsvg.insys .nebula.away, .gsvg.insys .glink.away { opacity: .07; }
   .gsvg.insys .gplanet.away .plabel { display: none; }
   .glegend:not(.open) > :not(.glhead) { display: none; }
+  .gneeds:not([hidden]) ~ .glegend { left: auto; right: 16px; }
   .glegend .glhead { background: none; border: 0; color: var(--muted); font: inherit; cursor: pointer; padding: 0; text-align: left; }
   .glegend .glhead::before { content: "▸ "; }
   .glegend.open .glhead::before { content: "▾ "; }
@@ -523,6 +524,18 @@
     .gplanet, .glink, .groad, .ghub, .gsys, .glinks, .ghubs { transition: none; }
     .gcity, .cityroad, .cityring, .spoke, .gbubble, #gplanet:not([hidden]) { animation: none; }
   }
+  /* First screen: every session that needs you, with its ask and a one-click Open. */
+  .gneeds { position: absolute; top: 96px; left: 16px; width: 380px; max-height: calc(100% - 106px); overflow-y: auto; z-index: 3;
+            background: rgba(18,19,26,.92); border: 1px solid var(--waiting); border-radius: 8px; padding: 6px 0; }
+  .gneeds h3 { margin: 0 10px 4px; font-size: 12px; color: var(--waiting); font-weight: 600; }
+  .gneeds .gnrow { padding: 2px 10px; cursor: pointer; border-top: 1px solid var(--line); }
+  .gneeds .gnrow:hover { background: rgba(245,165,36,.08); }
+  .gneeds .gntop { display: flex; align-items: center; gap: 6px; font-size: 12px; line-height: 15px; min-width: 0; }
+  .gneeds .gntop b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 0 1 auto; min-width: 0; }
+  .gneeds .gnitem { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1 1 0; min-width: 0; }
+  .gneeds .gnage { color: var(--muted); flex: none; }
+  .gneeds .gnopen { flex: none; background: var(--waiting); color: var(--bg); border: 0; border-radius: 4px; font: inherit; font-weight: 600; padding: 0 8px; cursor: pointer; }
+  .gneeds .gnask { font-size: 12px; line-height: 15px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .gsearch { position: absolute; top: 54px; left: 16px; display: flex; gap: 8px; align-items: center; z-index: 2; }
   .gsearch input { width: 260px; background: rgba(18,19,26,.9); border: 1px solid var(--line); border-radius: 8px; color: var(--text); font: inherit; padding: 6px 10px; outline: none; }
   .gsearch input:focus { border-color: var(--working); }
@@ -1557,12 +1570,12 @@ function gGlide(vx, vy) {
   });
 }
 function gFit(box, pad = 40, animate = true, rightInset = 0) {
-  const W = G.wrap.clientWidth - rightInset, H = G.wrap.clientHeight;
+  const left = gLeftInset(), W = G.wrap.clientWidth - rightInset - left, H = G.wrap.clientHeight;
   if (W < 200 || H < 200) { G.pendingFit = [box, pad, rightInset]; G.cam = G.cam || { k: 0.3, x: 0, y: 0 }; return; }  // tab hidden (cmux workspace not shown): fit once it has a size
   G.pendingFit = null;
   const top = 64;  // the breadcrumb and search box sit in this band
   const k = Math.min((W - pad * 2) / box.w, (H - top - pad * 2) / box.h, box.maxK || 2.2);
-  const to = { k, x: (W - box.w * k) / 2 - box.x * k, y: top + (H - top - box.h * k) / 2 - box.y * k };
+  const to = { k, x: left + (W - box.w * k) / 2 - box.x * k, y: top + (H - top - box.h * k) / 2 - box.y * k };
   if (!animate || !G.cam || RM.matches) { gStop(); G.cam = to; return gApply(); }
   gTween(to);
 }
@@ -1719,7 +1732,7 @@ function gBuild() {
   G.tip = el("div", "gtip"); G.tip.hidden = true;
   G.bubbles = el("div", "gbubbles");
   G.stars = el("canvas", "gstars");
-  wrap.append(G.stars, svg, G.bubbles, gCrumbs(), gSearchBox(), gLegend(), gMinimap(), G.tip);
+  wrap.append(G.stars, svg, G.bubbles, gCrumbs(), gSearchBox(), gNeedsList(), gLegend(), gMinimap(), G.tip);
   G.wrap = wrap; G.svg = svg; G.world = world;
   if (G.hits) gSearchPaint();  // a rebuild keeps the current search
 }
@@ -1890,6 +1903,36 @@ function gCrumbs() {
   return c;
 }
 function gRefreshCrumbs() { const old = G.wrap.querySelector(".gcrumbs"); if (old) old.replaceWith(gCrumbs()); }
+// Every session that needs you, longest wait first: its name, its item, how long it has waited, its ask, and Open.
+function gNeedsSessions() {
+  return (last ? last.regions : []).flatMap(r => r.sessions).filter(t => t.needs)
+    .sort((a, b) => gWaitedFrom(a) - gWaitedFrom(b));
+}
+function gWaitedFrom(t) { return Date.parse(t.since) || (t.updated ? t.updated * 1000 : Date.now()); }
+function gNeedsList() {
+  const list = gNeedsSessions();
+  const box = el("div", "gneeds");
+  box.hidden = !list.length;
+  if (!list.length) return box;
+  const itemOf = Object.fromEntries((last.work ? last.work.items : []).flatMap(i => i.tabs.map(id => [id, i])));
+  box.append(el("h3", "", `Needs you · ${list.length}`));
+  list.forEach(t => {
+    const item = itemOf[t.id], ask = (t.action && t.action.action) || t.ask || t.recap || "";
+    const row = el("div", "gnrow"), top = el("div", "gntop");
+    const open = el("button", "gnopen", "Open");
+    open.dataset.walk = "open-need";
+    open.title = `Go to this tab in ${t.ws_title || "its workspace"}`;
+    open.onclick = e => { e.stopPropagation(); post("/api/focus", { workspace: t.workspace, surface: t.id }); };
+    top.append(el("b", "", t.title), el("span", "gnitem", item && item.title !== t.title ? "· " + item.title : ""), el("span", "gnage", ago(new Date(gWaitedFrom(t)).toISOString())), open);
+    row.append(top, el("div", "gnask", ask));
+    row.title = ask + (item ? "\n\nClick to show its item on the map" : "");
+    if (item) row.onclick = () => gOpenPlanet(item.id);
+    box.append(row);
+  });
+  return box;
+}
+function gRefreshNeeds() { const old = G.wrap.querySelector(".gneeds"); if (old) old.replaceWith(gNeedsList()); }
+function gLeftInset() { const n = G.wrap && G.wrap.querySelector(".gneeds"); return n && !n.hidden ? n.offsetWidth + 24 : 0; }
 
 function gLegend() {
   let open = false;
@@ -2278,7 +2321,7 @@ function renderGalaxy(state) {
   if (!G.data) { map.replaceChildren(el("div", "tl-prompt", "Mapping the galaxy…")); return; }
   const live = Object.fromEntries((state.work ? state.work.items : []).map(i => [i.id, i]));
   G.data.planets.forEach(p => { const v = live[p.id]; if (v) Object.assign(p, { status: v.status, needs: v.needs, next: v.next, tabs: v.tabs }); });
-  tally.replaceChildren(...[["needs you", G.data.planets.filter(p => p.needs).length], ["active", G.data.planets.filter(p => !p.dormant).length], ["dormant", G.data.planets.filter(p => p.dormant).length]]
+  tally.replaceChildren(...[["needs you", gNeedsSessions().length], ["active", G.data.planets.filter(p => !p.dormant).length], ["dormant", G.data.planets.filter(p => p.dormant).length]]
     .map(([k, n]) => { const s = el("span"); s.append(el("b", "", String(n)), document.createTextNode(" " + k)); return s; }));
   if (!G.wrap || !map.contains(G.wrap)) {
     if (!G.wrap) gBuild();
@@ -2293,6 +2336,7 @@ function renderGalaxy(state) {
   G.data.planets.forEach(gStatusPatch);
   gSunPatch();
   gRefreshCrumbs();
+  gRefreshNeeds();
   if (G.planet && G.detail && !G.single && !G.cityLayer.childNodes.length) gDrawCities();
   // While a session is docked beside the map, the item panel tucks away so the map gets the room; it comes back on Send back.
   if (!(last && last.docked)) G.peekPanel = false;
