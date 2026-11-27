@@ -1075,9 +1075,21 @@ say what the user must do or decide so the work moves to the next step.
 - kind "none": the reply asks nothing and needs nothing. action = "Nothing needed. Suggested next: " + the most useful
   next instruction the user could give, max 15 words. options = [].
   A reply whose requested work is done and whose only ask is housekeeping (start a fresh session, /spinoff, /compact,
-  restart a tool) is "none": that is an FYI. So is an optional offer that only repackages finished work (a shareable page,
-  a Confluence doc, an email draft, a summary). So is a next step the agent should take itself (commit, push, open a PR
-  and tag its reviewer), such as work left uncommitted. If the work is not done, judge the reply's other asks as usual.
+  restart a tool) is "none": that is an FYI. So is a next step the agent should take itself (commit, push, open a PR
+  and tag its reviewer), such as work left uncommitted. So is a check the agent's own tools can do (take a screenshot,
+  look at the screen, run the tests, read a file or page): asking the user to do it is "none", even when the agent
+  says it cannot see the screen, because it has screenshot tools. If the work is not done, judge the reply's other
+  asks as usual.
+- Work that stalled and cannot resume without the user is "action". Two signs: the agent says it is blocked (failed,
+  needs access, out of ideas), or the reply ends by announcing work it is about to do ("checking that now", "running
+  it next") yet the turn ended, so nothing is running. action = what would unblock it, e.g. tell it to continue.
+- The agent offering to do more work itself ("I can turn this into a page if you want", "want me to also...") is
+  "decision", even when the requested work is done: the user decides whether to take the offer. An offer only to undo
+  a small side effect of finished work ("say if you want the old name back") is not more work: judge the rest.
+- Advice that names a step only the user can take (ask a person, say something in a meeting, run something before
+  committing to a customer) is "action". Only an optional idea the reply itself argues against ("value is low; to
+  test it anyway, run a trial") is not an ask.
+- When unsure whether the reply needs the user, pick "action" or "decision", not "none".
 Plain words, no markdown, no quotes, no emoji. Use names and numbers from the reply. Input:
 """
 _actions = {"cache": None, "lock": threading.Lock(), "busy": set()}
@@ -1097,6 +1109,40 @@ def cached_action(full):
     return _action_cache().get(action_key(full)) if full else None
 
 
+ACTION_VOTES = 3  # one Haiku call flips borderline replies between runs; the majority of 3 holds steady
+FLAG_ORDER = ("action", "decision", "none")  # no majority flags: a false flag costs a glance, a miss costs the work
+
+
+def _classify_once(payload):
+    out = subprocess.run([*NAMER, "--json-schema", json.dumps(ACTION_SCHEMA)], input=ACTION_RULES + json.dumps(payload, indent=1),
+                         capture_output=True, text=True, timeout=NAME_TIMEOUT, cwd="/tmp",
+                         env={**os.environ, "MAX_THINKING_TOKENS": "0"})
+    result = json.loads(out.stdout)
+    if result.get("is_error"):
+        raise RuntimeError(result.get("result", "action call failed"))
+    return {**result["structured_output"], "cost": result.get("total_cost_usd") or 0}
+
+
+def classify_reply(prompt, reply):
+    """What this reply needs from the user: ACTION_VOTES parallel Haiku calls, majority kind wins, no majority flags."""
+    payload = {"user_last_prompt": prompt, "agent_reply": reply}
+    with ThreadPoolExecutor(ACTION_VOTES) as pool:
+        futures = [pool.submit(_classify_once, payload) for _ in range(ACTION_VOTES)]
+    votes, errors = [], []
+    for f in futures:
+        try:
+            votes.append(f.result())
+        except (subprocess.TimeoutExpired, RuntimeError, json.JSONDecodeError) as e:
+            errors.append(e)
+            print(f"{time.strftime('%H:%M:%S')} action vote failed: {e}", flush=True)
+    if not votes:
+        raise errors[0]
+    kinds = [v["kind"] for v in votes]
+    kind = max(FLAG_ORDER, key=kinds.count)  # ties resolve to the earlier kind in FLAG_ORDER, so toward flagging
+    row = next((v for v in votes if v["kind"] == kind), votes[0])
+    return {**row, "kind": kind, "cost": sum(v["cost"] for v in votes), "votes": kinds}
+
+
 def work_out_action(full, prompt):
     """One headless Haiku call: what this reply needs from the user. Cached by reply text, so each reply costs one call."""
     key = action_key(full)
@@ -1105,14 +1151,7 @@ def work_out_action(full, prompt):
             return _action_cache().get(key)
         _actions["busy"].add(key)
     try:
-        payload = {"user_last_prompt": prompt, "agent_reply": full[-FULL_CHARS:]}
-        out = subprocess.run([*NAMER, "--json-schema", json.dumps(ACTION_SCHEMA)], input=ACTION_RULES + json.dumps(payload, indent=1),
-                             capture_output=True, text=True, timeout=NAME_TIMEOUT, cwd="/tmp",
-                             env={**os.environ, "MAX_THINKING_TOKENS": "0"})
-        result = json.loads(out.stdout)
-        if result.get("is_error"):
-            raise RuntimeError(result.get("result", "action call failed"))
-        row = {**result["structured_output"], "cost": result.get("total_cost_usd") or 0}
+        row = classify_reply(prompt, full[-FULL_CHARS:])
         with _actions["lock"]:
             _action_cache()[key] = row
             ACTIONS.write_text(json.dumps(_action_cache()))

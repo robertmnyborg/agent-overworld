@@ -23,8 +23,8 @@ Refuse to miss a session that needs Robert. A false flag costs a glance; when un
 ## Each round
 1. Fable re-audits the live page at http://127.0.0.1:7717, GET only, with every POST stubbed. New findings go into `plans/ux-backlog.md` (seeded from `plans/ux-audit-2026-11-25.md`, 34 findings).
 2. Pick the top open item (blockers first, then by audit rank).
-3. Build it on a branch in a worktree. Test against a second server on port 7718 with all POSTs stubbed. Never restart the live server, never move, close or message Robert's real tabs.
-4. Run S1 to S4. Keep the change only if no signal gets worse. Commit, open a PR on robertmnyborg/agent-overworld. Robert merges.
+3. Build it on a branch in a worktree. Test against a second server on port 7718 with all POSTs stubbed. Never move, close or message Robert's real tabs.
+4. Run S1 to S4. Keep the change only if no signal gets worse. Commit, open a PR on robertmnyborg/agent-overworld. Once S1 to S4 hold, merge it yourself, then restart the live server on main: kill the pid in `~/.overworld/server.pid` and relaunch it from inside cmux, outside the sandbox, as `autostart.zsh` does.
 5. Append a row to `plans/ux-loop/runs.md`: round, item, PR, S1 to S4, cost.
 
 ## Stops

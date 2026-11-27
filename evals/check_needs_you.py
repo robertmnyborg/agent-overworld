@@ -6,7 +6,7 @@ worked out for that reply (None when it had none), and the reply's tail. This ru
 inputs and compares with the labels. When server.py has no needs_you() (before round 1), the rule is the old one:
 status == "waiting".
 
-With --reclassify, the frozen action kind is replaced by a fresh call to the server's current classifier rules (one Haiku call
+With --reclassify, the frozen action kind is replaced by a fresh call to the server's current classifier rules (server.ACTION_VOTES Haiku calls
 per row, nothing cached), so a change to those rules can be measured. The user prompt comes from the row's transcript now.
 
 --refreeze does the same and writes the fresh kinds back to the golden set (labels untouched), for after a rule change.
@@ -14,7 +14,7 @@ per row, nothing cached), so a change to those rules can be measured. The user p
 Usage: python3 evals/check_needs_you.py [--json] [--reclassify | --refreeze]
 Exit 0 when the S1 target holds (every yes flagged, at most 1 false flag), else 1.
 """
-import hashlib, json, os, subprocess, sys
+import hashlib, json, sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -26,16 +26,9 @@ MAX_FALSE = 1
 
 
 def reclassify(row):
-    """The server's current classifier on the frozen reply, without touching its cache."""
+    """The server's current classifier (same votes as live) on the frozen reply, without touching its cache."""
     prompt = (server.recent_prompts(row["transcript"], 1) or [""])[-1] if Path(row["transcript"]).exists() else ""
-    payload = {"user_last_prompt": prompt, "agent_reply": row["last_reply_tail"]}
-    out = subprocess.run([*server.NAMER, "--json-schema", json.dumps(server.ACTION_SCHEMA)],
-                         input=server.ACTION_RULES + json.dumps(payload, indent=1), capture_output=True, text=True,
-                         timeout=server.NAME_TIMEOUT, cwd="/tmp", env={**os.environ, "MAX_THINKING_TOKENS": "0"}, check=True)
-    result = json.loads(out.stdout)
-    if result.get("is_error"):
-        raise RuntimeError(result.get("result", "action call failed"))
-    return result["structured_output"]["kind"]
+    return server.classify_reply(prompt, row["last_reply_tail"])["kind"]
 
 
 def flag(row):
