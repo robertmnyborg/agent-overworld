@@ -11,7 +11,11 @@ per row, nothing cached), so a change to those rules can be measured. The user p
 
 --refreeze does the same and writes the fresh kinds back to the golden set (labels untouched), for after a rule change.
 
-Usage: python3 evals/check_needs_you.py [--json] [--reclassify | --refreeze]
+--live-path also reads each row's real transcript with server.last_reply() and runs the rule on the turn role it finds,
+for rows whose frozen reply is still that transcript's last reply. The frozen check forces the role to "assistant", so
+only this catches a transcript whose newest record is harness text (a task notification, an interrupt marker).
+
+Usage: python3 evals/check_needs_you.py [--json] [--reclassify | --refreeze] [--live-path]
 Exit 0 when the S1 target holds (every yes flagged, at most 1 false flag), else 1.
 """
 import hashlib, json, sys
@@ -40,6 +44,23 @@ def flag(row):
     return server.needs_you(status, "assistant", action, row["last_reply_tail"])
 
 
+def live_path(rows):
+    """(missed yes titles, false flag titles, titles skipped because the session moved past its frozen reply)."""
+    missed, false, moved = [], [], []
+    for r in rows:
+        _, _, role, full = server.last_reply(r["transcript"])
+        if not full or " ".join(r["last_reply_tail"].split())[-120:] not in " ".join(full.split()):
+            moved.append(r["title"])
+            continue
+        kind = r["classifier_kind"]
+        hit = server.needs_you(r["map_status_2026_11_26"], role, {"kind": kind} if kind else None, full)
+        if r["needs_you"] and not hit:
+            missed.append(f"{r['title']} (role {role})")
+        elif not r["needs_you"] and hit:
+            false.append(r["title"])
+    return missed, false, moved
+
+
 def main():
     rows = [json.loads(l) for l in GOLDEN.read_text().splitlines() if l.strip()]
     if "--reclassify" in sys.argv or "--refreeze" in sys.argv:
@@ -57,6 +78,11 @@ def main():
     out = {"recall": f"{len(yes) - len(missed)}/{len(yes)}", "false_flags": f"{len(false)}/{len(no)}",
            "missed": [r["title"] for r in missed], "false": [r["title"] for r in false],
            "rule": "server.needs_you" if hasattr(server, "needs_you") else "status == waiting (old)"}
+    ok = not missed and len(false) <= MAX_FALSE
+    if "--live-path" in sys.argv:
+        lm, lf, moved = live_path(rows)
+        out["live_path"] = {"checked": len(rows) - len(moved), "missed": lm, "false": lf, "moved_on": moved}
+        ok = ok and not lm and len(lf) <= MAX_FALSE
     if "--json" in sys.argv:
         print(json.dumps(out))
     else:
@@ -65,7 +91,14 @@ def main():
             print(f"  missed: {t}")
         for t in out["false"]:
             print(f"  false flag: {t}")
-    return 0 if not missed and len(false) <= MAX_FALSE else 1
+        if "live_path" in out:
+            lp = out["live_path"]
+            print(f"live path: {lp['checked']} rows still on their frozen reply, {len(lp['missed'])} missed, {len(lp['false'])} false flags, {len(lp['moved_on'])} moved on")
+            for t in lp["missed"]:
+                print(f"  live missed: {t}")
+            for t in lp["false"]:
+                print(f"  live false flag: {t}")
+    return 0 if ok else 1
 
 
 if __name__ == "__main__":
