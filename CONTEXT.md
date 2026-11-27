@@ -368,3 +368,11 @@ Review screenshots: `.shots/review-*.png`; after: `.shots/fix-*.png`.
 ## 2026-11-26 (Tenet Drafts Review label)
 - Robert ruled "Tenet Drafts Review" yes: its reply opens by asking him to edit the tenet drafts and answer their open questions. The earlier no was judged on a 1,500-character excerpt that cut that ask.
 - Golden excerpts refrozen to the last 8,000 characters the live classifier reads (16 of 31 rows lengthened). S1 18/18, 0 false of 13 on frozen, reclassified and live-path runs. Golden set stays local.
+
+## 2026-11-27 (Light spatial UI overhaul: Galaxy default, Obsidian Dark + Daylight Light, non-blocking Peek)
+- Replaced the boxed Triage grid with a borderless spatial UI (Obsidian Dark default + Daylight Atlas Light toggle via header or `t`, 48px single-row header, zero wireframe card borders, zero repeated row button clusters):
+  - **Galaxy (`1`/`g`, default on load in dark mode):** Minimalist cartographic constellations with crisp hairline orbits, body-aware + title-aware label culling (`0` overlaps), `All | Needs you` spotlight dimming, hover ask preview cards, floating `Next need` / `Fit` / `Hide dormant` / `Links & Legend` HUD, and smooth pan/zoom/minimap/cities.
+  - **Spaces (`2`/`s`):** Bird's-eye spatial map of Scratch + workspace groups (`By workspace | By goal | Wiring`), drag-and-drop move/split/group/merge preserved, plus diffed DOM patching on the 3s poll (`patchSpacesWorkspaceInPlace`) so hover, focus, and scroll survive ticks without rebuilding `<main>`.
+  - **Inbox (`3`/`i`):** Fast keyboard triage split (`356px` rail + live markdown/decision/composer + 5-tab Turn Diagnostics + recent tool steps), diffed across 3s polls so active drafts never reset.
+  - **Unified non-blocking Peek drawer:** Shared 500px right slide-over for both Galaxy work items (History SVG, Linked items, Projects/PRs/Slack/Files, Dock/Park/Done/Resume, inline Reply) and Spaces sessions (Decision box, quick options, Markdown, Reply composer, 5-tab Diagnostics) with no modal blackout scrim.
+- Verified on read-only test server (`:7721`): `impeccable detect --json` `[]`, `evals/walk.mjs` `S2 = 2` clicks (`/api/dock`), `0` console errors, `0` label collisions, `0` horizontal overflow at 1440x900 and 900x900, and Spaces DOM identity preserved across 3s poll (`pollStable: true`).
