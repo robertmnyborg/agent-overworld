@@ -42,3 +42,8 @@ Checks: `python3 evals/check_needs_you.py` (S1), `node evals/walk.mjs` against `
 ## Round 4 notes
 - Cause of #3: `openReply` returned early unless a Tabs-view card was on the page. It now builds from the session record; "next" and the waiting count come from the needs-you list when there are no cards.
 - Each needs-you row has Reply (outlined) next to Open. Checked on a :7719 stubbed copy with 0 cards on the page: row Reply opens the view, Tab moves to the next session, Esc closes; Inbox row Reply opens it too (it did nothing before).
+
+## Round 3 audit (Fable, on the round 3 code at :7718)
+- Report `plans/ux-audit-r3.md` (local). 8 new findings, 45 to 52: 2 blockers, 4 major, 2 minor. S4 after it: 5 blockers / 22 majors (round 4 had already fixed #3, which the audit saw on the round 3 code).
+- #45 and #46 mean the live page still misses or over-flags sessions the frozen S1 says are right: cached verdicts ignore rule changes, and a harness record after a reply (task notification, interrupt marker) counts as Robert's turn. S1 forces the last turn to the agent's, so it can't see #46. Both are next, ahead of #35.
+- The audit's own S1 run (16/18, 3/13) used the main checkout's older golden copy, not the round 3 labels.
