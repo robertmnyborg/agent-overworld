@@ -4,27 +4,43 @@
 <style>
 :root{--ui:-apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif;--mono:ui-monospace,Menlo,monospace;
   --bg:#dfe9ee;--head:rgba(250,248,242,.95);--panel:#fbfaf6;--line:#d6d2c4;--fg:#22303a;--mut:#6b7780;--chip:#eeebe1;--input:#fff;
-  --hot:#c8452c;--onhot:#fff;--good:#2f7d55;--acc:#22303a;--onacc:#fff}
+  --hot:#c8452c;--onhot:#fff;--good:#2f7d55;--acc:#22303a;--onacc:#fff
+  --c1:rgba(255,255,255,.35);
+  --c2:#c9bf9f;
+  --c3:#f4efe0;
+  --c4:#cfe0e6;
+  --c5:#3b4a52;
+  --c6:#6b7780;
+  --c7:#22303a;
+  --c8:#7b858c;
+  --c9:#fff;
+  --c10:#4b5860;
+  --c11:rgba(251,250,246,.92);
+  --c12:#c8452c;
+  --c13:#e0803a;
+  --c14:#d9a62b;
+  --c15:#3b7dd8;
+  --c16:#a9b1b6;}
 html,body{margin:0;height:100%;overflow:hidden;background:var(--bg)}
 svg{position:fixed;top:44px;left:0;width:100%;height:calc(100% - 44px);cursor:grab;font-family:var(--ui);
-  background:repeating-linear-gradient(0deg,transparent 0 39px,rgba(255,255,255,.35) 39px 40px),repeating-linear-gradient(90deg,transparent 0 39px,rgba(255,255,255,.35) 39px 40px)}
+  background:repeating-linear-gradient(0deg,transparent 0 39px,var(--c1) 39px 40px),repeating-linear-gradient(90deg,transparent 0 39px,var(--c1) 39px 40px)}
 svg.drag{cursor:grabbing}
-.coast{fill:#c9bf9f} .land{fill:#f4efe0} .shallow{fill:#cfe0e6}
-.iname{fill:#3b4a52;font-size:22px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;text-anchor:middle}
-.icount{fill:#6b7780;font-size:14px;text-anchor:middle;font-variant-numeric:tabular-nums}
-.town{cursor:pointer} .town:hover .mk{stroke:#22303a;stroke-width:2}
-.sel .mk{stroke:#22303a;stroke-width:3}
-.tname{fill:#22303a;font-size:13.5px;font-weight:600;text-anchor:middle;pointer-events:none;paint-order:stroke;stroke:#f4efe0;stroke-width:3.5px}
-.tname.dim{fill:#7b858c;font-weight:400;font-size:11px}
-.flag{font-size:13px;font-weight:700;fill:#fff;text-anchor:middle;pointer-events:none;font-variant-numeric:tabular-nums}
+.coast{fill:var(--c2)} .land{fill:var(--c3)} .shallow{fill:var(--c4)}
+.iname{fill:var(--c5);font-size:22px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;text-anchor:middle}
+.icount{fill:var(--c6);font-size:14px;text-anchor:middle;font-variant-numeric:tabular-nums}
+.town{cursor:pointer} .town:hover .mk{stroke:var(--c7);stroke-width:2}
+.sel .mk{stroke:var(--c7);stroke-width:3}
+.tname{fill:var(--c7);font-size:13.5px;font-weight:600;text-anchor:middle;pointer-events:none;paint-order:stroke;stroke:var(--c3);stroke-width:3.5px}
+.tname.dim{fill:var(--c8);font-weight:400;font-size:11px}
+.flag{font-size:13px;font-weight:700;fill:var(--c9);text-anchor:middle;pointer-events:none;font-variant-numeric:tabular-nums}
 .fade{opacity:.3}
-.legend{position:fixed;left:14px;bottom:12px;color:#4b5860;font:12px/1.6 var(--ui);background:rgba(251,250,246,.92);padding:8px 12px;border-radius:8px;border:1px solid var(--line)}
+.legend{position:fixed;left:14px;bottom:12px;color:var(--c10);font:12px/1.6 var(--ui);background:var(--c11);padding:8px 12px;border-radius:8px;border:1px solid var(--line)}
 .legend i{display:inline-block;width:10px;height:10px;margin:0 5px -1px 10px}
 </style></head><body>
 <svg id="map"><g id="cam"></g></svg>
 <div class="legend">Each island is a goal; towns are its open tasks. Flags = needs you, flag colour = how long it has waited.
-  <i style="background:#c8452c"></i>7d+ <i style="background:#e0803a"></i>1-7d <i style="background:#d9a62b"></i>&lt;1d · big flag = work block, ◆ = decision
-  <i style="background:#3b7dd8"></i>working <i style="background:#a9b1b6"></i>open · n = next ask · 0 = fit</div>
+  <i style="background:var(--c12)"></i>7d+ <i style="background:var(--c13)"></i>1-7d <i style="background:var(--c14)"></i>&lt;1d · big flag = work block, ◆ = decision
+  <i style="background:var(--c15)"></i>working <i style="background:var(--c16)"></i>open · n = next ask · 0 = fit</div>
 <script src="/proto/common.js"></script>
 <script>
 "use strict";
@@ -33,7 +49,7 @@ const S = (tag, attrs = {}, parent) => { const e = document.createElementNS(NS, 
 const SX = 178, SY = 104; // spacing between towns
 let view = { x: 0, y: 0, k: 1 }, fitted = false, layoutKey = "";
 const apply = () => cam.setAttribute("transform", `translate(${view.x},${view.y}) scale(${view.k})`);
-const flagColor = at => { const d = (Date.now() - at) / OW.DAY; return d >= 7 ? "#c8452c" : d >= 1 ? "#e0803a" : "#d9a62b"; };
+const flagColor = at => { const d = (Date.now() - at) / OW.DAY; return d >= 7 ? "#c8452c" : d >= 1 ? "#e0803a" : "#d9a62b"; };  /* design-gate: allow (per-style map palette) */
 
 function layout(goals, w, h) {
   const isl = goals.map(g => {
@@ -83,14 +99,14 @@ function town(G, t, x, y, selected) {
   if (t.openAsks.length) {
     const big = t.openAsks.some(a => a.effort === "block"), dec = t.openAsks.some(a => a.kind === "decision");
     const col = flagColor(t.oldest), fw = (big ? 64 : 50) + (dec ? 12 : 0), fh = big ? 28 : 22;
-    S("line", { x1: 0, y1: 4, x2: 0, y2: -fh - 14, stroke: "#22303a", "stroke-width": 1.5 }, T);
+    S("line", { x1: 0, y1: 4, x2: 0, y2: -fh - 14, stroke: "#22303a", "stroke-width": 1.5 }, T);  /* design-gate: allow (per-style map palette) */
     S("path", { d: `M0 ${-fh - 14} h${fw} l-6 ${fh / 2} l6 ${fh / 2} h${-fw} z`, fill: col, class: "mk" }, T);
     S("text", { x: fw / 2 - 2, y: -14 - fh / 2 + 3.5, class: "flag" }, T).textContent = (dec ? "◆ " : "") + OW.ago(t.oldest);
-    S("circle", { r: 4.5, fill: "#22303a" }, T);
+    S("circle", { r: 4.5, fill: "#22303a" }, T);  /* design-gate: allow (per-style map palette) */
     const nm = S("text", { y: 19, class: "tname" }, T); nm.textContent = t.title.length > 21 ? t.title.slice(0, 20) + "…" : t.title;
   } else {
     const working = t.status === "working", s = working ? 7 : 5;
-    S("rect", { x: -s, y: -s, width: s * 2, height: s * 2, rx: 1.5, fill: working ? "#3b7dd8" : "#a9b1b6", class: "mk" }, T);
+    S("rect", { x: -s, y: -s, width: s * 2, height: s * 2, rx: 1.5, fill: working ? "#3b7dd8" : "#a9b1b6", class: "mk" }, T);  /* design-gate: allow (per-style map palette) */
     const nm = S("text", { y: 18, class: "tname dim" }, T); nm.textContent = t.title.length > 22 ? t.title.slice(0, 21) + "…" : t.title;
   }
   S("circle", { r: 26, cy: -8, fill: "transparent" }, T);

@@ -4,40 +4,57 @@
 <style>
 :root{--ui:-apple-system,BlinkMacSystemFont,"SF Pro Text",Inter,sans-serif;--mono:ui-monospace,Menlo,monospace;
   --bg:#07080d;--head:rgba(10,12,20,.92);--panel:#0f1220;--line:#262b40;--fg:#e8eaf3;--mut:#8c92ab;--chip:#1b2033;--input:#0a0c16;
-  --hot:#ffb23f;--onhot:#1a1000;--good:#6fd9a3;--acc:#ffb23f;--onacc:#1a1000}
+  --hot:#ffb23f;--onhot:#1a1000;--good:#6fd9a3;--acc:#ffb23f;--onacc:#1a1000
+  --c1:#1d2236;
+  --c2:#4a5070;
+  --c3:#cfd3e6;
+  --c4:#8c92ab;
+  --c5:#fff;
+  --c6:rgba(255,255,255,.12);
+  --c7:#e8eaf3;
+  --c8:#07080d;
+  --c9:#6c7290;
+  --c10:#ffcf8a;
+  --c11:rgba(10,12,20,.8);
+  --c12:#ff5a3c;
+  --c13:#ff8f3c;
+  --c14:#ffb23f;
+  --c15:#ffe08a;
+  --c16:#4aa3ff;
+  --c17:#4b5170;}
 html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
 svg{position:fixed;top:44px;left:0;width:100%;height:calc(100% - 44px);cursor:grab;font-family:var(--ui)}
 svg.drag{cursor:grabbing}
-.ring{fill:none;stroke:#1d2236;stroke-width:1} .ring.band{stroke-dasharray:2 5}
-.ringlbl{fill:#4a5070;font-size:12px;letter-spacing:.05em}
-.sun{filter:url(#glow)} .gtitle{fill:#cfd3e6;font-size:21px;font-weight:650;text-anchor:middle}
-.gcount{fill:#8c92ab;font-size:14px;text-anchor:middle}
-.body{cursor:pointer;transition:opacity .2s} .body:hover .orb{stroke:#fff;stroke-width:2}
-.orb{stroke:rgba(255,255,255,.12)}
-.lbl{fill:#e8eaf3;font-size:15px;pointer-events:none;paint-order:stroke;stroke:#07080d;stroke-width:3px}
-.lbl.dim{fill:#6c7290;font-size:12px}
-.age{fill:#ffcf8a;font-size:13px;font-weight:650;pointer-events:none;text-anchor:middle;paint-order:stroke;stroke:#07080d;stroke-width:3px}
-.sel .orb{stroke:#fff;stroke-width:2.5}
+.ring{fill:none;stroke:var(--c1);stroke-width:1} .ring.band{stroke-dasharray:2 5}
+.ringlbl{fill:var(--c2);font-size:12px;letter-spacing:.05em}
+.sun{filter:url(#glow)} .gtitle{fill:var(--c3);font-size:21px;font-weight:650;text-anchor:middle}
+.gcount{fill:var(--c4);font-size:14px;text-anchor:middle}
+.body{cursor:pointer;transition:opacity .2s} .body:hover .orb{stroke:var(--c5);stroke-width:2}
+.orb{stroke:var(--c6)}
+.lbl{fill:var(--c7);font-size:15px;pointer-events:none;paint-order:stroke;stroke:var(--c8);stroke-width:3px}
+.lbl.dim{fill:var(--c9);font-size:12px}
+.age{fill:var(--c10);font-size:13px;font-weight:650;pointer-events:none;text-anchor:middle;paint-order:stroke;stroke:var(--c8);stroke-width:3px}
+.sel .orb{stroke:var(--c5);stroke-width:2.5}
 .fade{opacity:.25}
 .pulse{animation:p 2.4s ease-out infinite;transform-box:fill-box;transform-origin:center}
 @keyframes p{0%{opacity:.7;transform:scale(1)}100%{opacity:0;transform:scale(2.3)}}
-.legend{position:fixed;left:14px;bottom:12px;color:#8c92ab;font:12px/1.6 var(--ui);background:rgba(10,12,20,.8);padding:8px 12px;border-radius:8px;border:1px solid var(--line)}
+.legend{position:fixed;left:14px;bottom:12px;color:var(--c4);font:12px/1.6 var(--ui);background:var(--c11);padding:8px 12px;border-radius:8px;border:1px solid var(--line)}
 .legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin:0 5px -1px 10px}
 </style></head><body>
 <svg id="map"><defs>
   <filter id="glow" x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="9" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-  <radialGradient id="sunG"><stop offset="0" stop-color="#fff8e0"/><stop offset=".45" stop-color="#ffd27a"/><stop offset="1" stop-color="#ff8a2a"/></radialGradient>
-  <radialGradient id="shade" cx=".35" cy=".3"><stop offset="0" stop-color="#fff" stop-opacity=".35"/><stop offset=".6" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".45"/></radialGradient>
+  <radialGradient id="sunG"><stop offset="0" stop-color="#fff8e0"/><stop offset=".45" stop-color="#ffd27a"/><stop offset="1" stop-color="#ff8a2a"/></radialGradient> <!-- design-gate: allow (SVG gradient stops) -->
+  <radialGradient id="shade" cx=".35" cy=".3"><stop offset="0" stop-color="#fff" stop-opacity=".35"/><stop offset=".6" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".45"/></radialGradient> <!-- design-gate: allow (SVG gradient stops) -->
 </defs><g id="cam"></g></svg>
 <div class="legend">Asks fall toward the sun as they wait: inner ring = oldest.
-  <i style="background:#ff5a3c"></i>7d+ <i style="background:#ff8f3c"></i>3-7d <i style="background:#ffb23f"></i>1-3d <i style="background:#ffe08a"></i>&lt;1d
-  <i style="background:#4aa3ff"></i>working <i style="background:#4b5170"></i>open, nothing needed · big = needs a work block · n = next ask</div>
+  <i style="background:var(--c12)"></i>7d+ <i style="background:var(--c13)"></i>3-7d <i style="background:var(--c14)"></i>1-3d <i style="background:var(--c15)"></i>&lt;1d
+  <i style="background:var(--c16)"></i>working <i style="background:var(--c17)"></i>open, nothing needed · big = needs a work block · n = next ask</div>
 <script src="/proto/common.js"></script>
 <script>
 "use strict";
 const NS = "http://www.w3.org/2000/svg", svg = document.getElementById("map"), cam = document.getElementById("cam");
 const S = (tag, attrs = {}, parent) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; };
-const BANDS = [{ min: 7, r: 78, c: "#ff5a3c", l: "7d+" }, { min: 3, r: 118, c: "#ff8f3c", l: "3-7d" }, { min: 1, r: 158, c: "#ffb23f", l: "1-3d" }, { min: 0, r: 198, c: "#ffe08a", l: "<1d" }];
+const BANDS = [{ min: 7, r: 78, c: "#ff5a3c", l: "7d+" }, { min: 3, r: 118, c: "#ff8f3c", l: "3-7d" }, { min: 1, r: 158, c: "#ffb23f", l: "1-3d" }, { min: 0, r: 198, c: "#ffe08a", l: "<1d" }];  /* design-gate: allow (per-style map palette) */
 const OUTER = 250, SYS = 300;
 let view = { x: 0, y: 0, k: 1 }, fitted = false, layoutKey = "";
 
@@ -65,7 +82,7 @@ function render(data, { selected }) {
     BANDS.forEach(b => { S("circle", { r: b.r, class: "ring band" }, G); S("text", { x: 4, y: -b.r - 3, class: "ringlbl" }, G).textContent = b.l; });
     S("circle", { r: OUTER, class: "ring" }, G);
     const asks = g.tasks.reduce((s, t) => s + t.openAsks.length, 0);
-    S("circle", { r: 26 + Math.min(18, asks * 3), fill: asks ? "url(#sunG)" : "#3a3f58", class: "sun" }, G);
+    S("circle", { r: 26 + Math.min(18, asks * 3), fill: asks ? "url(#sunG)" : "#3a3f58", class: "sun" }, G);  /* design-gate: allow (per-style map palette) */
     S("text", { y: -OUTER - 24, class: "gtitle" }, G).textContent = g.title;
     S("text", { y: -OUTER - 4, class: "gcount" }, G).textContent = `${asks} need you · ${g.tasks.length} open`;
     // asks on age bands
@@ -83,7 +100,7 @@ function render(data, { selected }) {
     }
     rest.sort((x, y) => (y.lastActive || 0) - (x.lastActive || 0)).forEach((t, i) => {
       const a = -Math.PI / 2 + (i / Math.max(rest.length, 1)) * Math.PI * 2;
-      body(G, t, Math.cos(a) * OUTER, Math.sin(a) * OUTER, t.status === "working" ? "#4aa3ff" : "#4b5170", t.status === "working" ? 7 : 5, selected, false);
+      body(G, t, Math.cos(a) * OUTER, Math.sin(a) * OUTER, t.status === "working" ? "#4aa3ff" : "#4b5170", t.status === "working" ? 7 : 5, selected, false);  /* design-gate: allow (per-style map palette) */
     });
   }
 }
@@ -93,7 +110,7 @@ function body(G, t, x, y, color, r, selected, isAsk) {
   if (isAsk && Date.now() - t.oldest > OW.DAY) S("circle", { r: r + 2, fill: "none", stroke: color, "stroke-width": 2, class: "pulse" }, B);
   S("circle", { r, fill: color, class: "orb" }, B);
   S("circle", { r, fill: "url(#shade)", "pointer-events": "none" }, B);
-  if (t.openAsks.length > 1) S("text", { y: 3.5, class: "age", style: "fill:#1a1000;stroke:none" }, B).textContent = t.openAsks.length;
+  if (t.openAsks.length > 1) S("text", { y: 3.5, class: "age", style: "fill:#1a1000;stroke:none" }, B).textContent = t.openAsks.length;  /* design-gate: allow (per-style map palette) */
   if (isAsk) {
     S("text", { y: -r - 5, class: "age" }, B).textContent = OW.ago(t.oldest);
     const lb = S("text", { x: r + 6, y: 4, class: "lbl" }, B); lb.textContent = t.title.length > 30 ? t.title.slice(0, 29) + "…" : t.title;

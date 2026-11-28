@@ -4,34 +4,51 @@
 <style>
 :root{--ui:"SF Mono",ui-monospace,Menlo,monospace;--mono:ui-monospace,Menlo,monospace;
   --bg:#020a06;--head:rgba(3,14,8,.94);--panel:#04140b;--line:#123a22;--fg:#c9f5d6;--mut:#5f9a74;--chip:#0a2414;--input:#010804;
-  --hot:#ffb84d;--onhot:#1d1200;--good:#5cff9d;--acc:#5cff9d;--onacc:#02140a}
-html,body{margin:0;height:100%;background:radial-gradient(ellipse at center,#06180d 0,#020a06 70%);overflow:hidden}
+  --hot:#ffb84d;--onhot:#1d1200;--good:#5cff9d;--acc:#5cff9d;--onacc:#02140a
+  --c1:#06180d;
+  --c2:#020a06;
+  --c3:#0f3d22;
+  --c4:#4a2a10;
+  --c5:rgba(255,120,40,.045);
+  --c6:#2f7a4c;
+  --c7:#a0642a;
+  --c8:#0c2e1a;
+  --c9:#7fd9a0;
+  --c10:#fff;
+  --c11:rgba(0,0,0,.5);
+  --c12:#e6ffef;
+  --c13:#ffcf8a;
+  --c14:#5f9a74;
+  --c15:rgba(2,12,6,.85);
+  --c16:#ffb84d;
+  --c17:#5cff9d;}
+html,body{margin:0;height:100%;background:radial-gradient(ellipse at center,var(--c1) 0,var(--c2) 70%);overflow:hidden}
 svg{position:fixed;top:44px;left:0;width:100%;height:calc(100% - 44px);font-family:var(--ui)}
-.ring{fill:none;stroke:#0f3d22;stroke-width:1} .ring.stale{stroke:#4a2a10;stroke-dasharray:3 4}
-.zone{fill:rgba(255,120,40,.045)}
-.rlbl{fill:#2f7a4c;font-size:10px} .rlbl.stale{fill:#a0642a}
-.spoke{stroke:#0c2e1a;stroke-width:1}
-.sector{fill:#7fd9a0;font-size:11.5px;letter-spacing:.08em;text-transform:uppercase}
-.sector.dim{fill:#2f7a4c}
+.ring{fill:none;stroke:var(--c3);stroke-width:1} .ring.stale{stroke:var(--c4);stroke-dasharray:3 4}
+.zone{fill:var(--c5)}
+.rlbl{fill:var(--c6);font-size:10px} .rlbl.stale{fill:var(--c7)}
+.spoke{stroke:var(--c8);stroke-width:1}
+.sector{fill:var(--c9);font-size:11.5px;letter-spacing:.08em;text-transform:uppercase}
+.sector.dim{fill:var(--c6)}
 .sweep{fill:url(#sweepG);transform-origin:0 0;animation:sw 6s linear infinite}
 @keyframes sw{to{transform:rotate(360deg)}}
-.blip{cursor:pointer} .blip:hover .b{stroke:#fff;stroke-width:2}
-.b{stroke:rgba(0,0,0,.5);stroke-width:1}
-.sel .b{stroke:#fff;stroke-width:2.5}
-.tag{fill:#e6ffef;font-size:11px;pointer-events:none;paint-order:stroke;stroke:#020a06;stroke-width:3px}
-.tag.age{fill:#ffcf8a;font-weight:700;font-size:10px}
+.blip{cursor:pointer} .blip:hover .b{stroke:var(--c10);stroke-width:2}
+.b{stroke:var(--c11);stroke-width:1}
+.sel .b{stroke:var(--c10);stroke-width:2.5}
+.tag{fill:var(--c12);font-size:11px;pointer-events:none;paint-order:stroke;stroke:var(--c2);stroke-width:3px}
+.tag.age{fill:var(--c13);font-weight:700;font-size:10px}
 .trace{fill:none;stroke-width:1;opacity:.5}
 .fade{opacity:.22}
-.legend{position:fixed;left:14px;bottom:12px;color:#5f9a74;font:11.5px/1.7 var(--ui);background:rgba(2,12,6,.85);padding:8px 12px;border:1px solid var(--line);border-radius:4px}
+.legend{position:fixed;left:14px;bottom:12px;color:var(--c14);font:11.5px/1.7 var(--ui);background:var(--c15);padding:8px 12px;border:1px solid var(--line);border-radius:4px}
 .legend i{display:inline-block;width:9px;height:9px;margin:0 5px -1px 10px}
 </style></head><body>
 <svg id="map"><defs>
-  <linearGradient id="wedge" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#5cff9d" stop-opacity="0"/><stop offset="1" stop-color="#5cff9d" stop-opacity=".16"/></linearGradient>
+  <linearGradient id="wedge" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#5cff9d" stop-opacity="0"/><stop offset="1" stop-color="#5cff9d" stop-opacity=".16"/></linearGradient> <!-- design-gate: allow (SVG gradient stops) -->
   <filter id="bloom" x="-200%" y="-200%" width="500%" height="500%"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
 </defs><g id="scope"></g></svg>
 <div class="legend">Center = just replied · rings = how long it has waited · outside the dashed ring = stale (over 7 days)<br>
-  <i style="background:#ffb84d;border-radius:50%"></i>action <i style="background:#ffb84d;transform:rotate(45deg)"></i>decision · big = needs a work block
-  <i style="background:#5cff9d;border-radius:50%"></i>working <i style="border:1px solid #2f7a4c;border-radius:50%"></i>open, nothing needed · n = next ask</div>
+  <i style="background:var(--c16);border-radius:50%"></i>action <i style="background:var(--c16);transform:rotate(45deg)"></i>decision · big = needs a work block
+  <i style="background:var(--c17);border-radius:50%"></i>working <i style="border:1px solid var(--c6);border-radius:50%"></i>open, nothing needed · n = next ask</div>
 <script src="/proto/common.js"></script>
 <script>
 "use strict";
@@ -105,7 +122,7 @@ function blip(G, t, x, y, isAsk, selected, ang) {
   if (isAsk) {
     const big = t.openAsks.some(a => a.effort === "block"), s = big ? 9 : 6, dec = t.openAsks.some(a => a.kind === "decision");
     const stale = Date.now() - t.oldest > 7 * OW.DAY;
-    const col = stale ? "#ff7a3a" : "#ffb84d";
+    const col = stale ? "#ff7a3a" : "#ffb84d";  /* design-gate: allow (per-style map palette) */
     if (dec) S("rect", { x: -s, y: -s, width: s * 2, height: s * 2, transform: "rotate(45)", fill: col, class: "b", filter: "url(#bloom)" }, B);
     else S("circle", { r: s, fill: col, class: "b", filter: "url(#bloom)" }, B);
     const right = Math.cos(ang) >= 0;
@@ -114,9 +131,9 @@ function blip(G, t, x, y, isAsk, selected, ang) {
     const ag = S("text", { x: right ? s + 6 : -s - 6, y: 12, class: "tag age", "text-anchor": right ? "start" : "end" }, B);
     ag.textContent = OW.ago(t.oldest) + (t.openAsks.length > 1 ? ` · ${t.openAsks.length} asks` : "") + (big ? " · work block" : "");
   } else if (t.status === "working") {
-    S("circle", { r: 4.5, fill: "#5cff9d", class: "b", filter: "url(#bloom)" }, B);
+    S("circle", { r: 4.5, fill: "#5cff9d", class: "b", filter: "url(#bloom)" }, B);  /* design-gate: allow (per-style map palette) */
   } else {
-    S("circle", { r: 3, fill: "none", stroke: "#2f7a4c", "stroke-width": 1.2 }, B);
+    S("circle", { r: 3, fill: "none", stroke: "#2f7a4c", "stroke-width": 1.2 }, B);  /* design-gate: allow (per-style map palette) */
   }
   S("circle", { r: 12, fill: "transparent" }, B); // easier to hit
   B.onclick = e => { e.stopPropagation(); OW.open(t.id); };

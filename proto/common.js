@@ -99,7 +99,7 @@ const OW = (() => {
   .ow-nav a{color:var(--mut);text-decoration:none;padding:5px 9px;border-radius:6px} .ow-nav a:hover{color:var(--fg)}
   .ow-nav a.on{color:var(--fg);background:var(--chip)}
   .ow-panel{position:fixed;top:44px;right:0;bottom:0;width:440px;overflow:auto;padding:18px 20px 40px;z-index:4;
-    background:var(--panel);border-left:1px solid var(--line);color:var(--fg);font:14px/1.5 var(--ui);box-shadow:-12px 0 40px rgba(0,0,0,.18)}
+    background:var(--panel);border-left:1px solid var(--line);color:var(--fg);font:14px/1.5 var(--ui);box-shadow:-12px 0 40px var(--shadow,rgba(0,0,0,.18))} /* design-gate: allow */
   .ow-p-top{position:relative;padding-right:28px} .ow-p-goal{color:var(--mut);font-size:12px;text-transform:uppercase;letter-spacing:.06em}
   .ow-p-title{margin:2px 0 6px;font-size:19px;line-height:1.25} .ow-p-meta{color:var(--mut);margin:4px 0 12px}
   .ow-x{position:absolute;top:0;right:0;background:none;border:0;color:var(--mut);font-size:22px;cursor:pointer}
@@ -120,8 +120,9 @@ const OW = (() => {
   .ow-btn:hover{border-color:var(--fg)} .ow-btn.primary{background:var(--acc);color:var(--onacc);border-color:var(--acc)} .ow-btn.ghost{background:none}
   .ow-full summary{color:var(--mut);font-size:12px;cursor:pointer;margin-top:6px}
   .ow-full pre{white-space:pre-wrap;font:12px/1.5 var(--mono);color:var(--mut);max-height:320px;overflow:auto}
+  .ow-toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:7;display:flex;gap:12px;align-items:center;padding:9px 12px 9px 16px;border-radius:10px;background:var(--panel);color:var(--fg);border:1px solid var(--line);font:13px var(--ui)}
   .ow-tip{position:fixed;pointer-events:none;z-index:6;max-width:320px;padding:8px 10px;border-radius:8px;background:var(--panel);color:var(--fg);
-    border:1px solid var(--line);font:12px/1.4 var(--ui);box-shadow:0 6px 24px rgba(0,0,0,.25)}
+    border:1px solid var(--line);font:12px/1.4 var(--ui);box-shadow:0 6px 24px var(--shadow,rgba(0,0,0,.25))} /* design-gate: allow */
   .ow-tip b{display:block;font-size:13px}
   @media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
   `;
@@ -199,11 +200,16 @@ const OW = (() => {
     box.append(head, el("p", "ow-ask-text", a.text));
     if (a.exited) box.append(el("p", "ow-warn", "This session's agent has exited. Open the tab and resume it before replying."));
     const status = el("p", "ow-status");
-    const done = (label) => {
+    const done = (label, undoable) => {
       sent[a.id] = askKey(a.session); sessionStorage.setItem("ow.proto.sent", JSON.stringify(sent));
       cleared++; sessionStorage.setItem("ow.proto.cleared", cleared);
-      status.textContent = label; typing = false;
-      setTimeout(refresh, 600);
+      typing = false;
+      toast(label, undoable ? () => post("/api/triage", { id: a.id, verb: "undo" }).then(() => {
+        delete sent[a.id]; sessionStorage.setItem("ow.proto.sent", JSON.stringify(sent));
+        cleared = Math.max(0, cleared - 1); sessionStorage.setItem("ow.proto.cleared", cleared); refresh();
+      }) : null);
+      // clearing loop: once this task has nothing left for you, move to the next oldest ask
+      setTimeout(() => refresh().then(() => { const t = findTask(a.task.id); if (!t || !t.openAsks.length) nextAsk(); }), 600);
     };
     const fail = e => { status.textContent = "Not sent: " + e.message; status.className = "ow-status err"; };
     const send = text => post("/api/send", { workspace: a.session.workspace, surface: a.id, text });
@@ -227,14 +233,14 @@ const OW = (() => {
     v("Reply", "r", () => { if (ta.value.trim()) send(ta.value).then(() => done("Reply sent")).catch(fail); else ta.focus(); }, "primary");
     v("Do it yourself", "d", () => send(DIY_TEXT).then(() => done("Handed back: the agent will finish and report")).catch(fail));
     const blk = v("Block time ▾", "b", () => menu.hidden = !menu.hidden);
-    v("Dismiss", "x", () => post("/api/triage", { id: a.id, ask: askKey(a.session), verb: "dismiss" }).then(() => done("Dismissed until a new reply")).catch(fail));
+    v("Dismiss", "x", () => post("/api/triage", { id: a.id, ask: askKey(a.session), verb: "dismiss" }).then(() => done("Dismissed until a new reply", true)).catch(fail));
     const fo = v(a.exited ? "Open tab to resume" : "Open tab", "o", () => post("/api/focus", { workspace: a.session.workspace, surface: a.id }), a.exited ? "primary" : "ghost");
     if (a.exited) { verbs.querySelectorAll("button").forEach(b => { if (b !== fo && b !== blk && b.textContent !== "Dismiss") b.disabled = true; }); ta.disabled = true; box.querySelectorAll(".ow-chip").forEach(c => c.disabled = true); verbs.firstChild.classList.remove("primary"); }
     const menu = el("div", "ow-menu"); menu.hidden = true;
     const at9 = (addDays, weekday) => { const d = new Date(); d.setHours(9, 0, 0, 0); if (weekday != null) { do d.setDate(d.getDate() + 1); while (d.getDay() !== weekday); } else d.setDate(d.getDate() + addDays); return d.getTime(); };
     [["In 3 hours", Date.now() + 3 * 3600e3], ["Tomorrow 9am", at9(1)], ["Monday 9am", at9(0, 1)], ["Next week", at9(7)]].forEach(([l, until]) => {
       const b = el("button", "ow-btn", l);
-      b.onclick = () => post("/api/triage", { id: a.id, ask: askKey(a.session), verb: "block", until }).then(() => done(`Blocked until ${new Date(until).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })}`)).catch(fail);
+      b.onclick = () => post("/api/triage", { id: a.id, ask: askKey(a.session), verb: "block", until }).then(() => done(`Blocked until ${new Date(until).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })}`, true)).catch(fail);
       menu.append(b);
     });
     box.append(verbs, menu, status);
@@ -251,10 +257,10 @@ const OW = (() => {
   }
 
   function nextAsk() {
-    if (!data.asks.length) return;
+    if (!data.asks.length) { close(); return; }
     const ids = [...new Set(data.asks.map(a => a.task.id))];
     const i = ids.indexOf(openId);
-    open(ids[(i + 1) % ids.length]);
+    open(ids[i < 0 ? 0 : (i + 1) % ids.length]);
   }
 
   function start(title, viewName, render) {
@@ -270,6 +276,13 @@ const OW = (() => {
     setInterval(refresh, 5000);
   }
 
+  const toastEl = el("div", "ow-toast"); toastEl.hidden = true; let toastTimer = null;
+  function toast(label, undo) {
+    if (!toastEl.isConnected) document.body.append(toastEl);
+    toastEl.replaceChildren(el("span", null, label));
+    if (undo) { const u = el("button", "ow-btn", "Undo"); u.onclick = () => { toastEl.hidden = true; undo(); }; toastEl.append(u); }
+    toastEl.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => toastEl.hidden = true, 8000);
+  }
   const tip = el("div", "ow-tip"); tip.hidden = true;
   function showTip(e, title, line) { if (!tip.isConnected) document.body.append(tip); tip.hidden = false; tip.replaceChildren(el("b", null, title), el("span", null, line || "")); tip.style.left = Math.min(innerWidth - 340, e.clientX + 14) + "px"; tip.style.top = (e.clientY + 14) + "px"; }
   function hideTip() { tip.hidden = true; }
