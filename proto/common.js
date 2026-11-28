@@ -35,6 +35,7 @@ const OW = (() => {
     const [st, gx, tr, hist] = await Promise.all(["/api/state", "/api/galaxy", "/api/triage", "/api/asks-history"].map(u => fetch(u).then(r => r.json())));
     triage = tr;
     const sessions = st.regions.flatMap(r => r.sessions);
+    const workById = Object.fromEntries(((st.work && st.work.items) || []).map(i => [i.id, i]));
     const bySurface = Object.fromEntries(sessions.map(s => [s.id, s]));
     const goals = new Map(gx.systems.map(g => [g.id, { id: g.id, title: g.title, tasks: [] }]));
     const unfiled = { id: "_unfiled", title: "Not on a work item", tasks: [] };
@@ -53,7 +54,8 @@ const OW = (() => {
       if (p.dormant && !asks.length) { dormant++; continue; }
       const task = { id: p.id, title: p.title, goal: p.goal, next: p.next, waits_on: p.waits_on, people: p.people,
         status: asks.length ? "needs" : live.some(s => s.status === "working") ? "working" : "open",
-        lastActive: ts(p.last_active), live, sessions: p.sessions, asks: [] };
+        lastActive: ts(p.last_active), live, sessions: p.sessions, asks: [],
+        askedBy: ((workById[p.id] || {}).asked_by || []).map(x => x.person), people: p.people || [] };
       task.asks = asks.map(s => mkAsk(s, task));
       (goals.get(p.group) || unfiled).tasks.push(task);
     }
