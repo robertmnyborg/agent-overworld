@@ -95,7 +95,7 @@ const OW = (() => {
   .ow-title{font-weight:650;letter-spacing:.02em}
   .ow-metric{font-weight:650;color:var(--hot)} .ow-metric.ok{color:var(--good)}
   .ow-trend{display:flex;align-items:center;gap:6px;color:var(--mut);font-size:12px}
-  .ow-spark-line{fill:none;stroke:var(--hot);stroke-width:1.5} .ow-spark-goal{stroke:var(--good);stroke-dasharray:2 2;stroke-width:1}
+  .ow-spark-line{fill:none;stroke:var(--hot);stroke-width:1.5} .ow-spark-dot{fill:var(--hot)} .ow-spark-goal{stroke:var(--good);stroke-dasharray:2 2;stroke-width:1}
   .ow-delta.down{color:var(--good)} .ow-delta.up{color:var(--hot)}
   .ow-sub{color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .ow-flex{flex:1} .ow-nav{display:flex;gap:4px}
@@ -161,6 +161,8 @@ const OW = (() => {
     const NSs = "http://www.w3.org/2000/svg", line = document.createElementNS(NSs, "polyline");
     line.setAttribute("points", pts.map(([t, v]) => `${(Math.max(0, t - t0) / (7 * OW_DAY) * 82 + 1).toFixed(1)},${(19 - v / max * 17).toFixed(1)}`).join(" "));
     line.setAttribute("class", "ow-spark-line"); sp.append(line);
+    const [lt, lv] = pts[pts.length - 1], dot = document.createElementNS(NSs, "circle");
+    Object.entries({ cx: (Math.max(0, lt - t0) / (7 * OW_DAY) * 82 + 1).toFixed(1), cy: (19 - lv / max * 17).toFixed(1), r: 2.5, class: "ow-spark-dot" }).forEach(([k, v]) => dot.setAttribute(k, v)); sp.append(dot);
     const goal = document.createElementNS(NSs, "line"); const gy = (19 - 5 / max * 17).toFixed(1);
     Object.entries({ x1: 0, x2: 84, y1: gy, y2: gy, class: "ow-spark-goal" }).forEach(([k, v]) => goal.setAttribute(k, v)); sp.append(goal);
     sp.setAttribute("aria-label", `Asks waiting over 24h, last 7 days; goal under 5`);
