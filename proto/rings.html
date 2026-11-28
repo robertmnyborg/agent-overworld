@@ -14,14 +14,15 @@
 html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
 svg#map{position:fixed;top:44px;left:0;width:100%;height:calc(100% - 44px);font-family:var(--ui)}
 .ring{fill:none;stroke:var(--ring);stroke-width:1} .ring.stale{stroke:var(--ring-stale);stroke-dasharray:3 4}
-.zone{fill:var(--stalezone)}
-.rlbl{fill:var(--rlbl);font-size:10px;font-variant-numeric:tabular-nums} .rlbl.stale{fill:var(--rlbl-stale)}
+.zone{fill:var(--stalezone)} .laneband{fill:var(--stalezone)}
+.rlbl{fill:var(--mut);paint-order:stroke;stroke:var(--bg);stroke-width:3px;font-size:10.5px;font-weight:500;font-variant-numeric:tabular-nums} .rlbl.stale{fill:var(--rlbl-stale)}
 .spoke{stroke:var(--line);stroke-width:2}
 .wedge{opacity:.13} .rim{fill:none;stroke-width:7}
 .sector{fill:var(--fg);font-size:13px;font-weight:600} .sector .n{fill:var(--mut);font-weight:400}
 .blip{cursor:pointer} .blip:hover .b{stroke:var(--fg);stroke-width:2}
 .b{stroke:var(--halo);stroke-width:2}
 .sel .b{stroke:var(--fg);stroke-width:3}
+.person{fill:none;stroke:var(--fg);stroke-width:2}
 .stalering{fill:none;stroke:var(--mut);stroke-width:1;stroke-dasharray:2 2;opacity:.8}
 .tag{fill:var(--fg);font-size:11.5px;pointer-events:none;paint-order:stroke;stroke:var(--bg);stroke-width:3px}
 .tag.age{fill:var(--mut);font-size:10.5px;font-variant-numeric:tabular-nums}
@@ -29,6 +30,7 @@ svg#map{position:fixed;top:44px;left:0;width:100%;height:calc(100% - 44px);font-
 .stitle{fill:var(--fg);font-size:14px;font-weight:650;text-anchor:middle} .scount{fill:var(--mut);font-size:11.5px;text-anchor:middle}
 .mode{position:fixed;top:56px;left:14px;z-index:3;display:flex;background:var(--chip);border:1px solid var(--line);border-radius:8px;padding:2px;font:12.5px var(--ui)}
 .mode button{background:none;border:0;color:var(--mut);padding:5px 10px;border-radius:6px;cursor:pointer;font:inherit}
+.mode.dist{left:auto;right:14px} .mlbl{color:var(--mut);padding:5px 6px}
 .mode button.on{background:var(--panel);color:var(--fg)}
 .ow-ask-text,.ow-p-meta,.ow-full pre{font-family:var(--serif)!important} .ow-ask-text{font-size:16px!important;line-height:1.5}
 .ow-p-title{font-weight:600}
@@ -37,9 +39,10 @@ svg#map{position:fixed;top:44px;left:0;width:100%;height:calc(100% - 44px);font-
 </style></head><body>
 <svg id="map"><g id="scope"></g></svg>
 <div class="mode" role="tablist"><button data-m="one">One scope</button><button data-m="split">Per goal</button></div>
-<div class="legend">Center = just replied · rings = time since its last reply · past the dashed ring = over 7 days<br>
-  colour = goal · <i style="border-radius:50%"></i>action <i style="transform:rotate(45deg)"></i>decision · big = needs a work block ·
-  <i style="background:none;border:1px solid var(--mut);border-radius:50%"></i>open, nothing needed · v = switch layout · n = next ask</div>
+<div class="mode dist" role="tablist"><span class="mlbl">Distance means</span><button data-d="wait">Waited</button><button data-d="oldest">Oldest first</button><button data-d="score">Priority</button><button data-d="lanes">Lanes</button><span class="mlbl">·</span><button data-burst="1" title="Add 12 made-up asks from the last hour to see a burst">Simulate burst</button></div>
+<div class="legend"><span id="distnote"></span><br>
+  colour = goal · <i style="border-radius:50%"></i>action <i style="transform:rotate(45deg)"></i>decision · big = work block ·
+  <i style="background:none;border:2px solid var(--fg);border-radius:50%"></i>someone else involved · <i style="background:none;border:1px solid var(--mut);border-radius:50%"></i>nothing needed · v layout · n next ask</div>
 <script src="/proto/common.js"></script>
 <script>
 "use strict";
@@ -53,30 +56,95 @@ const hueOf = (g, i) => `var(--g${(i % 6) + 1})`;
 
 function ageDays(t) { return (Date.now() - (t.openAsks.length ? t.oldest : (t.lastActive || Date.now()))) / OW.DAY; }
 
-function rings(G, R) {
-  const r7 = frac(7) * R;
-  S("path", { d: `M ${-R} 0 A ${R} ${R} 0 1 0 ${R} 0 A ${R} ${R} 0 1 0 ${-R} 0 M ${-r7} 0 A ${r7} ${r7} 0 1 1 ${r7} 0 A ${r7} ${r7} 0 1 1 ${-r7} 0`, class: "zone", "fill-rule": "evenodd" }, G);
-  RINGS.forEach(([d, l]) => { const r = frac(d) * R; S("circle", { r, class: "ring" + (d >= 7 ? " stale" : "") }, G); if (R > 120 || d === 1 || d === 7) S("text", { x: 3, y: -r - 3, class: "rlbl" + (d >= 7 ? " stale" : "") }, G).textContent = l; });
-  S("circle", { r: R, class: "ring" }, G);
+// What distance from the centre means. Each mode places an ask by one rule and draws its own guide rings.
+const DIST = {
+  wait:   { label: "Waited", note: "Centre = just replied · rings = how long it has waited · past the dashed ring = over 7 days" },
+  oldest: { label: "Oldest first", note: "Centre = waited longest (up to 14 days) · outer edge = just replied · grey band = stale, over 14 days" },
+  score:  { label: "Priority", note: "Centre = do first. Score = someone else involved 35% + decision 20% + agent still running 15% + wait up to 14d 30%; over 30d fades" },
+  lanes:  { label: "Lanes", note: "Rings are kinds of ask, inside out: someone else involved · decision · quick reply · work block · stale over 14d · nothing needed" },
+};
+let dist = localStorage.getItem("ow.rings.dist") || "wait";
+const STALE_D = 14;
+const involved = t => (t.askedBy && t.askedBy.length) || (t.people && t.people.length) ? 1 : 0;
+const isDecision = t => t.openAsks.some(a => a.kind === "decision");
+const isBlock = t => t.openAsks.some(a => a.effort === "block");
+const isLive = t => t.openAsks.some(a => !a.exited);
+function score(t) {
+  const d = ageDays(t);
+  const age = Math.min(d, STALE_D) / STALE_D * (d > 30 ? 0.4 : 1);
+  return 0.35 * involved(t) + 0.2 * (isDecision(t) ? 1 : 0) + 0.15 * (isLive(t) ? 1 : 0) + 0.3 * age;
+}
+const LANES = ["Someone else involved", "Decision", "Quick reply", "Work block", "Stale, over 14d", "Nothing needed"];
+function laneOf(t) {
+  if (!t.openAsks.length) return 5;
+  if (ageDays(t) > STALE_D) return 4;
+  if (involved(t)) return 0;
+  if (isDecision(t)) return 1;
+  return isBlock(t) ? 3 : 2;
+}
+const laneR = (i, R) => R * (0.2 + 0.8 * (i + 0.5) / LANES.length);
+const f14 = d => Math.log1p(Math.min(d, STALE_D) * 24) / Math.log1p(STALE_D * 24);
+// radius fraction for a task under the current mode
+function rOf(t) {
+  const d = ageDays(t), ask = t.openAsks.length > 0;
+  if (dist === "wait") return frac(Math.min(d, MAXD));
+  if (dist === "oldest") return !ask ? 0.97 : d > STALE_D ? 0.93 : 0.3 + 0.54 * (1 - f14(d));
+  if (dist === "score") return !ask ? 0.97 : 0.28 + 0.62 * (1 - score(t));
+  return laneR(laneOf(t), 1);
 }
 
+function rings(G, R) {
+  if (dist === "wait") {
+    const r7 = frac(7) * R;
+    S("path", { d: `M ${-R} 0 A ${R} ${R} 0 1 0 ${R} 0 A ${R} ${R} 0 1 0 ${-R} 0 M ${-r7} 0 A ${r7} ${r7} 0 1 1 ${r7} 0 A ${r7} ${r7} 0 1 1 ${-r7} 0`, class: "zone", "fill-rule": "evenodd" }, G);
+    RINGS.forEach(([d, l]) => { const r = frac(d) * R; S("circle", { r, class: "ring" + (d >= 7 ? " stale" : "") }, G); if (R > 120 || d === 1 || d === 7) S("text", { x: 3, y: -r - 3, class: "rlbl" + (d >= 7 ? " stale" : "") }, G).textContent = l; });
+  } else if (dist === "oldest") {
+    const rb = 0.88 * R;
+    S("path", { d: `M ${-R} 0 A ${R} ${R} 0 1 0 ${R} 0 A ${R} ${R} 0 1 0 ${-R} 0 M ${-rb} 0 A ${rb} ${rb} 0 1 1 ${rb} 0 A ${rb} ${rb} 0 1 1 ${-rb} 0`, class: "zone", "fill-rule": "evenodd" }, G);
+    [[STALE_D, "14d"], [7, "7d"], [3, "3d"], [1, "1d"], [1 / 24, "1h"]].forEach(([d, l]) => { const r = (0.3 + 0.54 * (1 - f14(d))) * R; S("circle", { r, class: "ring" }, G); if (R > 120 || d === 1 || d === 7) S("text", { x: 3, y: -r - 3, class: "rlbl" }, G).textContent = l; });
+    S("circle", { r: rb, class: "ring stale" }, G);
+    if (R > 120) S("text", { x: 3, y: -rb - 3, class: "rlbl stale" }, G).textContent = "stale";
+  } else if (dist === "score") {
+    [[0.75, "Now"], [0.5, "Soon"], [0.25, "Later"], [0, "Low"]].forEach(([sc, l]) => { const r = (0.28 + 0.62 * (1 - sc)) * R; S("circle", { r, class: "ring" }, G); if (R > 120 || sc === 0.5) S("text", { x: 3, y: -r - 3, class: "rlbl" }, G).textContent = l; });
+  } else {
+    LANES.forEach((l, i) => { if (i % 2) { const ro = laneR(i, R) + R * 0.4 / LANES.length, ri = laneR(i, R) - R * 0.4 / LANES.length;
+        S("path", { d: `M ${-ro} 0 A ${ro} ${ro} 0 1 0 ${ro} 0 A ${ro} ${ro} 0 1 0 ${-ro} 0 M ${-ri} 0 A ${ri} ${ri} 0 1 1 ${ri} 0 A ${ri} ${ri} 0 1 1 ${-ri} 0`, class: "laneband", "fill-rule": "evenodd" }, G); } });
+    LANES.forEach((l, i) => { const r = laneR(i, R); S("circle", { r, class: "ring" + (i >= 4 ? " stale" : "") }, G); if (R > 150 || i < 2) S("text", { x: 3, y: -r - 3, class: "rlbl" + (i >= 4 ? " stale" : "") }, G).textContent = l; });
+  }
+  S("circle", { r: R, class: "ring" }, G);
+  G.querySelectorAll(".rlbl").forEach(t => ringLabels.push([G, t]));
+}
+let ringLabels = [];
+function raiseRingLabels() { for (const [G, t] of ringLabels) G.appendChild(t); ringLabels = []; }
+
 function placeTasks(G, g, color, a0, span, R, selected) {
-  const askT = g.tasks.filter(t => t.openAsks.length).sort((x, y) => x.oldest - y.oldest);
-  const restT = g.tasks.filter(t => !t.openAsks.length);
-  const spread = (list, off) => list.map((t, i) => [t, a0 + span * (0.08 + 0.84 * (list.length === 1 ? 0.5 : (i + off) / (list.length - 1 + off * 2)))]);
-  [...spread(restT, 0.5), ...spread(askT, 0)].forEach(([t, ang]) => {
-    const r = frac(Math.min(ageDays(t), MAXD)) * R;
-    blip(G, t, Math.cos(ang) * r, Math.sin(ang) * r, color, selected, ang);
-  });
+  // spread each ring band separately so a burst in one band uses that band's whole arc
+  const key = t => dist === "lanes" ? laneOf(t) : (t.openAsks.length ? "ask" : "rest");
+  const groups = new Map();
+  [...g.tasks].sort((x, y) => (x.oldest || 9e15) - (y.oldest || 9e15) || (y.lastActive || 0) - (x.lastActive || 0)).forEach(t => { const k = key(t); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(t); });
+  let off = 0;
+  for (const [, list] of groups) {
+    list.forEach((t, i) => {
+      const ang = a0 + span * (0.08 + 0.84 * (list.length === 1 ? 0.5 : (i + off) / (list.length - 1 + off * 2)));
+      const r = rOf(t) * R;
+      blip(G, t, Math.cos(ang) * r, Math.sin(ang) * r, color, selected, ang);
+    });
+    off = off ? 0 : 0.5;
+  }
 }
 
 function render(data, { selected }) {
-  document.querySelectorAll(".mode button").forEach(b => b.classList.toggle("on", b.dataset.m === mode));
+  document.querySelectorAll(".mode button[data-m]").forEach(b => b.classList.toggle("on", b.dataset.m === mode));
+  document.querySelectorAll(".mode button[data-d]").forEach(b => b.classList.toggle("on", b.dataset.d === dist));
+  document.querySelector(".mode button[data-burst]").classList.toggle("on", burst);
+  document.getElementById("distnote").textContent = DIST[dist].note + (burst ? " · BURST: 12 made-up asks added" : "");
+  if (burst) data = withBurst(data);
   const w = svg.clientWidth - (selected ? 440 : 0), h = svg.clientHeight - 56;
   scope.replaceChildren();
   const goals = data.goals.map((g, i) => ({ g, color: hueOf(g, data.goalsOrder ? data.goalsOrder.indexOf(g.id) : i) }));
   const selGoal = selected && data.goals.find(g => g.tasks.some(t => t.id === selected));
   if (mode === "one") renderOne(goals, w, h, selected, selGoal); else renderSplit(goals, w, h, selected, selGoal);
+  raiseRingLabels();
   declutter();
 }
 
@@ -134,11 +202,13 @@ function blip(G, t, x, y, color, selected, ang) {
   if (t.openAsks.length) {
     const big = t.openAsks.some(a => a.effort === "block"), s = big ? 9 : 6.5, dec = t.openAsks.some(a => a.kind === "decision");
     if (Date.now() - t.oldest > 7 * OW.DAY) S("circle", { r: s + 5, class: "stalering" }, B);
+    if (involved(t)) S("circle", { r: s + 3, class: "person" }, B);
     if (dec) S("rect", { x: -s, y: -s, width: s * 2, height: s * 2, transform: "rotate(45)", fill: color, class: "b" }, B);
     else S("circle", { r: s, fill: color, class: "b" }, B);
     const right = Math.cos(ang) >= 0, dx = right ? s + 8 : -s - 8, anc = right ? "start" : "end";
     S("text", { x: dx, y: 0, class: "tag", "text-anchor": anc }, B).textContent = t.title.length > 26 ? t.title.slice(0, 25) + "…" : t.title;
-    S("text", { x: dx, y: 12, class: "tag age", "text-anchor": anc }, B).textContent = OW.ago(t.oldest) + (big ? " · work block" : "") + (t.openAsks.length > 1 ? ` · ${t.openAsks.length} asks` : "");
+    const who = (t.askedBy && t.askedBy[0]) || (t.people && t.people[0]);
+    S("text", { x: dx, y: 12, class: "tag age", "text-anchor": anc }, B).textContent = OW.ago(t.oldest) + (who ? ` · ${who.split(" ")[0]}` : "") + (big ? " · work block" : "") + (t.openAsks.length > 1 ? ` · ${t.openAsks.length} asks` : "") + (dist === "score" ? ` · ${Math.round(score(t) * 100)}` : "");
   } else if (t.status === "working") {
     S("circle", { r: 4.5, fill: color, class: "b" }, B);
   } else {
@@ -152,7 +222,7 @@ function blip(G, t, x, y, color, selected, ang) {
 
 // labels that would land on another label (or a goal name) move a line, then hide the name; the age stays
 function declutter() {
-  const kept = [...scope.querySelectorAll(".sector,.stitle,.scount")].map(e => e.getBoundingClientRect());
+  const kept = [...scope.querySelectorAll(".sector,.stitle,.scount,.rlbl")].map(e => e.getBoundingClientRect());
   const hits = r => kept.some(k => r.left < k.right && r.right > k.left && r.top < k.bottom && r.bottom > k.top);
   const view = svg.getBoundingClientRect(), right = view.right - (OW.selected ? 440 : 0);
   [...scope.querySelectorAll(".blip")].filter(b => b.querySelector(".tag")).forEach(b => {
@@ -169,11 +239,30 @@ function declutter() {
       name.setAttribute("y", +name.getAttribute("y") + dy); age.setAttribute("y", +age.getAttribute("y") + dy);
     }
     name.setAttribute("display", "none");
+    const ra = age.getBoundingClientRect(), ab = { left: ra.left, right: ra.right, top: ra.top - 1, bottom: ra.bottom + 1 };
+    if (hits(ab)) age.setAttribute("display", "none"); else kept.push(ab);
   });
 }
 
+// Burst preview: 12 made-up asks from the last hour, spread over the goals. Display only; their verbs are disabled.
+let burst = false;
+function withBurst(data) {
+  const goals = data.goals.map(g => ({ ...g, tasks: [...g.tasks] }));
+  const kinds = ["decision", "action"];
+  for (let i = 0; i < 12; i++) {
+    const g = goals[i % goals.length], at = Date.now() - (5 + i * 4) * 60e3;
+    const task = { id: "burst" + i, title: `New ask ${i + 1}`, goalTitle: g.title, status: "needs", lastActive: at, live: [], sessions: 1,
+      askedBy: i % 4 === 0 ? ["Someone"] : [], people: [], asks: [], openAsks: [], oldest: at };
+    task.openAsks = [{ id: "burst" + i, task, title: task.title, at, text: "Made-up ask for the burst preview.", kind: kinds[i % 2], options: [], effort: i % 3 ? "quick" : "block", exited: true, session: { workspace: "", id: "" } }];
+    task.asks = task.openAsks;
+    g.tasks.push(task);
+  }
+  return { ...data, goals };
+}
+document.querySelectorAll(".mode button[data-d]").forEach(b => b.onclick = () => { dist = b.dataset.d; localStorage.setItem("ow.rings.dist", dist); OW.data && render(OW.data, { selected: OW.selected }); });
+document.querySelector(".mode button[data-burst]").onclick = () => { burst = !burst; OW.data && render(OW.data, { selected: OW.selected }); };
 function setMode(m) { mode = m; localStorage.setItem("ow.rings.mode", m); OW.data && render(OW.data, { selected: OW.selected }); }
-document.querySelectorAll(".mode button").forEach(b => b.onclick = () => setMode(b.dataset.m));
+document.querySelectorAll(".mode button[data-m]").forEach(b => b.onclick = () => setMode(b.dataset.m));
 addEventListener("keydown", e => { if (e.key === "v" && !(e.target.closest && e.target.closest("textarea,input"))) setMode(mode === "one" ? "split" : "one"); });
 svg.onclick = () => OW.close();
 addEventListener("resize", () => OW.data && render(OW.data, { selected: OW.selected }));
