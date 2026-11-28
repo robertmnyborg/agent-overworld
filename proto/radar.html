@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Overworld B: Radar</title>
+<style>
+:root{--ui:"SF Mono",ui-monospace,Menlo,monospace;--mono:ui-monospace,Menlo,monospace;
+  --bg:#020a06;--head:rgba(3,14,8,.94);--panel:#04140b;--line:#123a22;--fg:#c9f5d6;--mut:#5f9a74;--chip:#0a2414;--input:#010804;
+  --hot:#ffb84d;--onhot:#1d1200;--good:#5cff9d;--acc:#5cff9d;--onacc:#02140a}
+html,body{margin:0;height:100%;background:radial-gradient(ellipse at center,#06180d 0,#020a06 70%);overflow:hidden}
+svg{position:fixed;top:44px;left:0;width:100%;height:calc(100% - 44px);font-family:var(--ui)}
+.ring{fill:none;stroke:#0f3d22;stroke-width:1} .ring.stale{stroke:#4a2a10;stroke-dasharray:3 4}
+.zone{fill:rgba(255,120,40,.045)}
+.rlbl{fill:#2f7a4c;font-size:10px} .rlbl.stale{fill:#a0642a}
+.spoke{stroke:#0c2e1a;stroke-width:1}
+.sector{fill:#7fd9a0;font-size:11.5px;letter-spacing:.08em;text-transform:uppercase}
+.sector.dim{fill:#2f7a4c}
+.sweep{fill:url(#sweepG);transform-origin:0 0;animation:sw 6s linear infinite}
+@keyframes sw{to{transform:rotate(360deg)}}
+.blip{cursor:pointer} .blip:hover .b{stroke:#fff;stroke-width:2}
+.b{stroke:rgba(0,0,0,.5);stroke-width:1}
+.sel .b{stroke:#fff;stroke-width:2.5}
+.tag{fill:#e6ffef;font-size:11px;pointer-events:none;paint-order:stroke;stroke:#020a06;stroke-width:3px}
+.tag.age{fill:#ffcf8a;font-weight:700;font-size:10px}
+.trace{fill:none;stroke-width:1;opacity:.5}
+.fade{opacity:.22}
+.legend{position:fixed;left:14px;bottom:12px;color:#5f9a74;font:11.5px/1.7 var(--ui);background:rgba(2,12,6,.85);padding:8px 12px;border:1px solid var(--line);border-radius:4px}
+.legend i{display:inline-block;width:9px;height:9px;margin:0 5px -1px 10px}
+</style></head><body>
+<svg id="map"><defs>
+  <linearGradient id="wedge" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#5cff9d" stop-opacity="0"/><stop offset="1" stop-color="#5cff9d" stop-opacity=".16"/></linearGradient>
+  <filter id="bloom" x="-200%" y="-200%" width="500%" height="500%"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+</defs><g id="scope"></g></svg>
+<div class="legend">Center = just replied · rings = how long it has waited · outside the dashed ring = stale (over 7 days)<br>
+  <i style="background:#ffb84d;border-radius:50%"></i>action <i style="background:#ffb84d;transform:rotate(45deg)"></i>decision · big = needs a work block
+  <i style="background:#5cff9d;border-radius:50%"></i>working <i style="border:1px solid #2f7a4c;border-radius:50%"></i>open, nothing needed · n = next ask</div>
+<script src="/proto/common.js"></script>
+<script>
+"use strict";
+const NS = "http://www.w3.org/2000/svg", svg = document.getElementById("map"), scope = document.getElementById("scope");
+const S = (tag, attrs = {}, parent) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; };
+// age (days) -> radius fraction, log scale so a day and a month both fit
+const RINGS = [[1 / 24, "1h"], [1, "1d"], [3, "3d"], [7, "7d"], [30, "30d"]];
+const MAXD = 60;
+const frac = d => 0.08 + 0.92 * Math.log1p(Math.max(0, d) * 24) / Math.log1p(MAXD * 24);
+
+function render(data, { selected }) {
+  const w = svg.clientWidth - (selected ? 440 : 0), h = svg.clientHeight;
+  const R = Math.min(w - 360, h - 70) / 2 - 40, cx = w / 2, cy = (h - 56) / 2 + 4;
+  scope.setAttribute("transform", `translate(${cx},${cy})`);
+  scope.replaceChildren();
+  // stale zone
+  const r7 = frac(7) * R;
+  S("path", { d: `M ${-R} 0 A ${R} ${R} 0 1 0 ${R} 0 A ${R} ${R} 0 1 0 ${-R} 0 M ${-r7} 0 A ${r7} ${r7} 0 1 1 ${r7} 0 A ${r7} ${r7} 0 1 1 ${-r7} 0`, class: "zone", "fill-rule": "evenodd" }, scope);
+  RINGS.forEach(([d, l]) => { const r = frac(d) * R; S("circle", { r, class: "ring" + (d >= 7 ? " stale" : "") }, scope); S("text", { x: 4, y: -r - 3, class: "rlbl" + (d >= 7 ? " stale" : "") }, scope).textContent = l; });
+  S("circle", { r: R, class: "ring" }, scope);
+  // sweep (decorative; off under reduced motion via common CSS)
+  const sw = S("g", { class: "sweep" }, scope);
+  S("path", { d: `M0 0 L ${R} 0 A ${R} ${R} 0 0 0 ${Math.cos(-0.5) * R} ${Math.sin(-0.5) * R} Z`, fill: "url(#wedge)" }, sw);
+  // sectors: angle share by weight, asks count triple so the busy goals get room
+  const goals = data.goals.map(g => ({ g, w: 1 + g.tasks.length * 0.4 + g.tasks.reduce((s, t) => s + t.openAsks.length, 0) * 1.2 }));
+  const total = goals.reduce((s, x) => s + x.w, 0);
+  let a0 = -Math.PI / 2;
+  const selGoal = selected && data.goals.find(g => g.tasks.some(t => t.id === selected));
+  for (const { g, w: wt } of goals) {
+    const span = wt / total * Math.PI * 2, a1 = a0 + span, mid = a0 + span / 2;
+    S("line", { x1: 0, y1: 0, x2: Math.cos(a0) * R, y2: Math.sin(a0) * R, class: "spoke" }, scope);
+    const asks = g.tasks.reduce((s, t) => s + t.openAsks.length, 0);
+    const lx = Math.cos(mid) * (R + 30), ly = Math.sin(mid) * (R + 30);
+    const lab = S("text", { x: lx, y: ly + 4, class: "sector" + (asks ? "" : " dim"), "text-anchor": Math.abs(Math.cos(mid)) < 0.25 ? "middle" : Math.cos(mid) > 0 ? "start" : "end" }, scope);
+    lab.textContent = `${g.title}${asks ? ` · ${asks}` : ""}`;
+    if (selGoal && selGoal !== g) lab.classList.add("fade");
+    const G = S("g", { class: selGoal && selGoal !== g ? "fade" : "" }, scope);
+    // spread tasks across the sector; asks are placed by their oldest wait
+    const askT = g.tasks.filter(t => t.openAsks.length).sort((x, y) => x.oldest - y.oldest);
+    const restT = g.tasks.filter(t => !t.openAsks.length);
+    const spread = (list, off) => list.map((t, i) => [t, a0 + span * (0.1 + 0.8 * (list.length === 1 ? 0.5 : (i + off) / (list.length - 1 + off * 2)))]);
+    [...spread(askT, 0), ...spread(restT, 0.5)].forEach(([t, ang]) => {
+      const isAsk = t.openAsks.length > 0;
+      const d = ((Date.now() - (isAsk ? t.oldest : (t.lastActive || Date.now()))) / OW.DAY);
+      const r = frac(Math.min(d, MAXD)) * R, x = Math.cos(ang) * r, y = Math.sin(ang) * r;
+      blip(G, t, x, y, isAsk, selected, ang);
+    });
+    a0 = a1;
+  }
+  declutter();
+}
+// labels that would land on another label move down a line, then hide the name (age stays)
+function declutter() {
+  const kept = [...scope.querySelectorAll(".sector")].map(e => e.getBoundingClientRect());
+  const hits = r => kept.some(k => r.left < k.right && r.right > k.left && r.top < k.bottom && r.bottom > k.top);
+  [...scope.querySelectorAll(".blip")].filter(b => b.querySelector(".tag")).forEach(b => {
+    const name = b.querySelector(".tag:not(.age)"), age = b.querySelector(".tag.age");
+    for (let tries = 0; tries < 3; tries++) {
+      const r = name.getBoundingClientRect(), r2 = age.getBoundingClientRect();
+      const box = { left: Math.min(r.left, r2.left), right: Math.max(r.right, r2.right), top: r.top - 1, bottom: r2.bottom + 1 };
+      if (!hits(box)) { kept.push(box); return; }
+      const dy = (tries === 0 ? 1 : -1) * 13 * (tries + 1);
+      name.setAttribute("y", +name.getAttribute("y") + dy); age.setAttribute("y", +age.getAttribute("y") + dy);
+    }
+    name.setAttribute("display", "none");
+  });
+}
+
+function blip(G, t, x, y, isAsk, selected, ang) {
+  const B = S("g", { transform: `translate(${x},${y})`, class: "blip" + (selected === t.id ? " sel" : "") }, G);
+  if (isAsk) {
+    const big = t.openAsks.some(a => a.effort === "block"), s = big ? 9 : 6, dec = t.openAsks.some(a => a.kind === "decision");
+    const stale = Date.now() - t.oldest > 7 * OW.DAY;
+    const col = stale ? "#ff7a3a" : "#ffb84d";
+    if (dec) S("rect", { x: -s, y: -s, width: s * 2, height: s * 2, transform: "rotate(45)", fill: col, class: "b", filter: "url(#bloom)" }, B);
+    else S("circle", { r: s, fill: col, class: "b", filter: "url(#bloom)" }, B);
+    const right = Math.cos(ang) >= 0;
+    const tx = S("text", { x: right ? s + 6 : -s - 6, y: 0, class: "tag", "text-anchor": right ? "start" : "end" }, B);
+    tx.textContent = t.title.length > 28 ? t.title.slice(0, 27) + "…" : t.title;
+    const ag = S("text", { x: right ? s + 6 : -s - 6, y: 12, class: "tag age", "text-anchor": right ? "start" : "end" }, B);
+    ag.textContent = OW.ago(t.oldest) + (t.openAsks.length > 1 ? ` · ${t.openAsks.length} asks` : "") + (big ? " · work block" : "");
+  } else if (t.status === "working") {
+    S("circle", { r: 4.5, fill: "#5cff9d", class: "b", filter: "url(#bloom)" }, B);
+  } else {
+    S("circle", { r: 3, fill: "none", stroke: "#2f7a4c", "stroke-width": 1.2 }, B);
+  }
+  S("circle", { r: 12, fill: "transparent" }, B); // easier to hit
+  B.onclick = e => { e.stopPropagation(); OW.open(t.id); };
+  B.onmousemove = e => OW.showTip(e, t.title, isAsk ? t.openAsks[0].text : t.status === "working" ? "Working" : `Last active ${t.lastActive ? OW.ago(t.lastActive) + " ago" : "?"}`);
+  B.onmouseleave = OW.hideTip;
+}
+svg.onclick = () => OW.close();
+addEventListener("resize", () => OW.data && render(OW.data, { selected: OW.selected }));
+OW.start("Overworld · Radar", "radar", render);
+</script></body></html>

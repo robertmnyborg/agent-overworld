@@ -1366,6 +1366,7 @@ def state():
                                   "full": sess.get("full", "") if sess else "",
                                   "action": cached_action(sess.get("full", "")) if sess else None, "subagents": lane, "subagents_more": more,
                                   "turn_role": sess.get("turn_role") if sess else None,
+                                  "turn_at": sess.get("turn_at") if sess else None,
                                   "agent": sess["agent"] if sess else None,
                                   "cwd": sess["cwd"] if sess else None, "transcript": sess.get("transcript") if sess else None,
                                   "ws_ref": ws["ref"], "ws_title": ws["title"],
@@ -2294,6 +2295,36 @@ def search(q):
     return {"q": q, "hits": hits}
 
 
+TRIAGE = Path.home() / ".overworld" / "triage.json"  # session id -> {verb, ask, at, until}: asks dismissed or blocked to a later time
+_triage_lock = threading.Lock()
+
+
+def triage_read():
+    try:
+        return json.loads(TRIAGE.read_text())
+    except FileNotFoundError:
+        return {}
+
+
+def triage_write(body):
+    """Record a dismiss or a block-until for one session's current ask; verb undo removes it.
+    A record only holds while the ask text matches, so a new reply brings the session back."""
+    with _triage_lock:
+        t = triage_read()
+        if body["verb"] == "undo":
+            t.pop(body["id"], None)
+        elif body["verb"] in ("dismiss", "block"):
+            t[body["id"]] = {"verb": body["verb"], "ask": body["ask"], "at": time.time(),
+                             "until": body.get("until") if body["verb"] == "block" else None}
+        else:
+            raise KeyError(f"unknown verb {body['verb']}")
+        tmp = TRIAGE.with_suffix(".tmp")
+        tmp.write_text(json.dumps(t, indent=1))
+        tmp.replace(TRIAGE)
+        print(f"{time.strftime('%H:%M:%S')} triage {body['verb']}: {body['id'][:8]} until={body.get('until')}", flush=True)
+        return t
+
+
 class Handler(BaseHTTPRequestHandler):
     def _send(self, code, body, ctype="application/json"):
         data = body if isinstance(body, bytes) else json.dumps(body).encode()
@@ -2342,6 +2373,13 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, usage())
         elif self.path.startswith("/api/timeline?surface="):
             self._send(200, timeline(self.path.split("=", 1)[1]))
+        elif self.path == "/api/triage":
+            self._send(200, triage_read())
+        elif self.path.startswith("/proto/") and "/.." not in self.path:
+            f = HERE / self.path.split("?", 1)[0].lstrip("/")
+            if not f.is_file():
+                return self._send(404, {"error": "not found"})
+            self._send(200, f.read_bytes(), "application/javascript" if f.suffix == ".js" else "text/html; charset=utf-8")
         elif self.path in ("/", "/index.html"):
             self._send(200, (HERE / "index.html").read_bytes(), "text/html; charset=utf-8")
         else:
@@ -2412,6 +2450,11 @@ class Handler(BaseHTTPRequestHandler):
             if out.returncode:
                 print(f"{time.strftime('%H:%M:%S')} send failed: {out.stderr.strip()[:300]}", flush=True)
                 return self._send(502, {"error": out.stderr.strip()[:300] or f"cmux exited {out.returncode}"})
+        elif self.path == "/api/triage":
+            try:
+                return self._send(200, triage_write(body))
+            except KeyError as e:
+                return self._send(400, {"error": repr(e)})
         elif self.path == "/api/capture":
             try:
                 return self._send(200, capture_logged(body["text"].strip()))

@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Overworld C: Atlas</title>
+<style>
+:root{--ui:-apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif;--mono:ui-monospace,Menlo,monospace;
+  --bg:#dfe9ee;--head:rgba(250,248,242,.95);--panel:#fbfaf6;--line:#d6d2c4;--fg:#22303a;--mut:#6b7780;--chip:#eeebe1;--input:#fff;
+  --hot:#c8452c;--onhot:#fff;--good:#2f7d55;--acc:#22303a;--onacc:#fff}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--bg)}
+svg{position:fixed;top:44px;left:0;width:100%;height:calc(100% - 44px);cursor:grab;font-family:var(--ui);
+  background:repeating-linear-gradient(0deg,transparent 0 39px,rgba(255,255,255,.35) 39px 40px),repeating-linear-gradient(90deg,transparent 0 39px,rgba(255,255,255,.35) 39px 40px)}
+svg.drag{cursor:grabbing}
+.coast{fill:#c9bf9f} .land{fill:#f4efe0} .shallow{fill:#cfe0e6}
+.iname{fill:#3b4a52;font-size:22px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;text-anchor:middle}
+.icount{fill:#6b7780;font-size:14px;text-anchor:middle;font-variant-numeric:tabular-nums}
+.town{cursor:pointer} .town:hover .mk{stroke:#22303a;stroke-width:2}
+.sel .mk{stroke:#22303a;stroke-width:3}
+.tname{fill:#22303a;font-size:13.5px;font-weight:600;text-anchor:middle;pointer-events:none;paint-order:stroke;stroke:#f4efe0;stroke-width:3.5px}
+.tname.dim{fill:#7b858c;font-weight:400;font-size:11px}
+.flag{font-size:13px;font-weight:700;fill:#fff;text-anchor:middle;pointer-events:none;font-variant-numeric:tabular-nums}
+.fade{opacity:.3}
+.legend{position:fixed;left:14px;bottom:12px;color:#4b5860;font:12px/1.6 var(--ui);background:rgba(251,250,246,.92);padding:8px 12px;border-radius:8px;border:1px solid var(--line)}
+.legend i{display:inline-block;width:10px;height:10px;margin:0 5px -1px 10px}
+</style></head><body>
+<svg id="map"><g id="cam"></g></svg>
+<div class="legend">Each island is a goal; towns are its open tasks. Flags = needs you, flag colour = how long it has waited.
+  <i style="background:#c8452c"></i>7d+ <i style="background:#e0803a"></i>1-7d <i style="background:#d9a62b"></i>&lt;1d · big flag = work block, ◆ = decision
+  <i style="background:#3b7dd8"></i>working <i style="background:#a9b1b6"></i>open · n = next ask · 0 = fit</div>
+<script src="/proto/common.js"></script>
+<script>
+"use strict";
+const NS = "http://www.w3.org/2000/svg", svg = document.getElementById("map"), cam = document.getElementById("cam");
+const S = (tag, attrs = {}, parent) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; };
+const SX = 178, SY = 104; // spacing between towns
+let view = { x: 0, y: 0, k: 1 }, fitted = false, layoutKey = "";
+const apply = () => cam.setAttribute("transform", `translate(${view.x},${view.y}) scale(${view.k})`);
+const flagColor = at => { const d = (Date.now() - at) / OW.DAY; return d >= 7 ? "#c8452c" : d >= 1 ? "#e0803a" : "#d9a62b"; };
+
+function layout(goals, w, h) {
+  const isl = goals.map(g => {
+    const ts = [...g.tasks].sort((a, b) => (b.openAsks.length > 0) - (a.openAsks.length > 0) || (a.oldest || 9e15) - (b.oldest || 9e15) || (b.lastActive || 0) - (a.lastActive || 0));
+    const cols = Math.max(2, Math.ceil(Math.sqrt(ts.length * 1.6)));
+    const cells = ts.map((t, i) => { const r = Math.floor(i / cols), c = i % cols; return { t, x: c * SX + (r % 2) * SX / 2, y: r * SY }; });
+    const xs = cells.map(c => c.x), ys = cells.map(c => c.y);
+    const pad = 95;
+    return { g, cells, minx: Math.min(...xs) - pad, maxx: Math.max(...xs) + pad, miny: Math.min(...ys) - pad - 44, maxy: Math.max(...ys) + pad };
+  }).sort((a, b) => b.cells.filter(c => c.t.openAsks.length).length - a.cells.filter(c => c.t.openAsks.length).length || b.cells.length - a.cells.length);
+  // shelf packing to the screen's shape
+  const area = isl.reduce((s, i) => s + (i.maxx - i.minx) * (i.maxy - i.miny), 0);
+  const rowW = Math.sqrt(area * (w / h)) * 1.15;
+  let x = 0, y = 0, rowH = 0, W = 0;
+  for (const i of isl) {
+    const iw = i.maxx - i.minx, ih = i.maxy - i.miny;
+    if (x > 0 && x + iw > rowW) { x = 0; y += rowH + 30; rowH = 0; }
+    i.ox = x - i.minx; i.oy = y - i.miny; x += iw + 30; rowH = Math.max(rowH, ih); W = Math.max(W, x);
+  }
+  return { isl, W, H: y + rowH };
+}
+
+function render(data, { selected }) {
+  const w = svg.clientWidth - (selected ? 440 : 0), h = svg.clientHeight - 56;
+  const L = layout(data.goals, w, h);
+  const key = data.goals.map(g => g.id + g.tasks.length).join() + w + "x" + h;
+  if (!fitted || key !== layoutKey) { view.k = Math.min(w / L.W, h / L.H) * 0.95; view.x = (w - L.W * view.k) / 2; view.y = (h - L.H * view.k) / 2 + 4; apply(); fitted = true; layoutKey = key; }
+  cam.replaceChildren();
+  const selGoal = selected && data.goals.find(g => g.tasks.some(t => t.id === selected));
+  for (const i of L.isl) {
+    const G = S("g", { transform: `translate(${i.ox},${i.oy})`, class: selGoal && selGoal !== i.g ? "fade" : "" }, cam);
+    // island = union of discs around the towns: shallows, coast, land
+    for (const [cls, pad] of [["shallow", 30], ["coast", 14], ["land", 9]]) {
+      const layer = S("g", { class: cls }, G);
+      i.cells.forEach(c => S("ellipse", { cx: c.x, cy: c.y - 6, rx: SX * 0.62 + pad, ry: SY * 0.66 + pad }, layer));
+    }
+    const asks = i.g.tasks.reduce((s, t) => s + t.openAsks.length, 0);
+    const top = i.miny + 26, mid = (i.minx + i.maxx) / 2;
+    S("text", { x: mid, y: top, class: "iname" }, G).textContent = i.g.title;
+    S("text", { x: mid, y: top + 20, class: "icount" }, G).textContent = `${asks} need you · ${i.g.tasks.length} open`;
+    i.cells.forEach(c => town(G, c.t, c.x, c.y, selected));
+  }
+}
+
+function town(G, t, x, y, selected) {
+  const T = S("g", { transform: `translate(${x},${y})`, class: "town" + (selected === t.id ? " sel" : "") }, G);
+  if (t.openAsks.length) {
+    const big = t.openAsks.some(a => a.effort === "block"), dec = t.openAsks.some(a => a.kind === "decision");
+    const col = flagColor(t.oldest), fw = (big ? 64 : 50) + (dec ? 12 : 0), fh = big ? 28 : 22;
+    S("line", { x1: 0, y1: 4, x2: 0, y2: -fh - 14, stroke: "#22303a", "stroke-width": 1.5 }, T);
+    S("path", { d: `M0 ${-fh - 14} h${fw} l-6 ${fh / 2} l6 ${fh / 2} h${-fw} z`, fill: col, class: "mk" }, T);
+    S("text", { x: fw / 2 - 2, y: -14 - fh / 2 + 3.5, class: "flag" }, T).textContent = (dec ? "◆ " : "") + OW.ago(t.oldest);
+    S("circle", { r: 4.5, fill: "#22303a" }, T);
+    const nm = S("text", { y: 19, class: "tname" }, T); nm.textContent = t.title.length > 21 ? t.title.slice(0, 20) + "…" : t.title;
+  } else {
+    const working = t.status === "working", s = working ? 7 : 5;
+    S("rect", { x: -s, y: -s, width: s * 2, height: s * 2, rx: 1.5, fill: working ? "#3b7dd8" : "#a9b1b6", class: "mk" }, T);
+    const nm = S("text", { y: 18, class: "tname dim" }, T); nm.textContent = t.title.length > 22 ? t.title.slice(0, 21) + "…" : t.title;
+  }
+  S("circle", { r: 26, cy: -8, fill: "transparent" }, T);
+  T.onclick = e => { e.stopPropagation(); OW.open(t.id); };
+  T.onmousemove = e => OW.showTip(e, t.title, t.openAsks.length ? t.openAsks[0].text : t.status === "working" ? "Working" : `Last active ${t.lastActive ? OW.ago(t.lastActive) + " ago" : "?"}`);
+  T.onmouseleave = OW.hideTip;
+}
+
+let drag = null, moved = false;
+svg.onmousedown = e => { drag = { x: e.clientX - view.x, y: e.clientY - view.y }; moved = false; svg.classList.add("drag"); };
+addEventListener("mousemove", e => { if (!drag) return; moved = true; view.x = e.clientX - drag.x; view.y = e.clientY - drag.y; apply(); });
+addEventListener("mouseup", () => { drag = null; svg.classList.remove("drag"); });
+svg.addEventListener("wheel", e => {
+  e.preventDefault();
+  if (e.ctrlKey || e.metaKey) { const f = Math.exp(-e.deltaY * 0.01), r = svg.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
+    view.x = mx - (mx - view.x) * f; view.y = my - (my - view.y) * f; view.k *= f; }
+  else { view.x -= e.deltaX; view.y -= e.deltaY; }
+  apply();
+}, { passive: false });
+svg.onclick = () => { if (!moved) OW.close(); };
+addEventListener("keydown", e => { if (e.key === "0" && !e.target.closest("textarea")) { fitted = false; OW.data && render(OW.data, { selected: OW.selected }); } });
+OW.start("Overworld · Atlas", "atlas", render);
+</script></body></html>
