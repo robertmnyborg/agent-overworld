@@ -4,7 +4,7 @@
 <style>
 :root{--ui:-apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif;--mono:ui-monospace,Menlo,monospace;
   --bg:#dfe9ee;--head:rgba(250,248,242,.95);--panel:#fbfaf6;--line:#d6d2c4;--fg:#22303a;--mut:#6b7780;--chip:#eeebe1;--input:#fff;
-  --hot:#c8452c;--onhot:#fff;--good:#2f7d55;--acc:#22303a;--onacc:#fff
+  --hot:#c8452c;--onhot:#fff;--good:#2f7d55;--acc:#22303a;--onacc:#fff;
   --c1:rgba(255,255,255,.35);
   --c2:#c9bf9f;
   --c3:#f4efe0;
@@ -22,9 +22,9 @@
   --c15:#3b7dd8;
   --c16:#a9b1b6;}
 html,body{margin:0;height:100%;overflow:hidden;background:var(--bg)}
-svg{position:fixed;top:44px;left:0;width:100%;height:calc(100% - 44px);cursor:grab;font-family:var(--ui);
+svg#map{position:fixed;top:44px;left:0;width:100%;height:calc(100% - 44px);cursor:grab;font-family:var(--ui);
   background:repeating-linear-gradient(0deg,transparent 0 39px,var(--c1) 39px 40px),repeating-linear-gradient(90deg,transparent 0 39px,var(--c1) 39px 40px)}
-svg.drag{cursor:grabbing}
+svg#map.drag{cursor:grabbing}
 .coast{fill:var(--c2)} .land{fill:var(--c3)} .shallow{fill:var(--c4)}
 .iname{fill:var(--c5);font-size:22px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;text-anchor:middle}
 .icount{fill:var(--c6);font-size:14px;text-anchor:middle;font-variant-numeric:tabular-nums}

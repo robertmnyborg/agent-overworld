@@ -4,7 +4,7 @@
 <style>
 :root{--ui:-apple-system,BlinkMacSystemFont,"SF Pro Text",Inter,sans-serif;--mono:ui-monospace,Menlo,monospace;
   --bg:#07080d;--head:rgba(10,12,20,.92);--panel:#0f1220;--line:#262b40;--fg:#e8eaf3;--mut:#8c92ab;--chip:#1b2033;--input:#0a0c16;
-  --hot:#ffb23f;--onhot:#1a1000;--good:#6fd9a3;--acc:#ffb23f;--onacc:#1a1000
+  --hot:#ffb23f;--onhot:#1a1000;--good:#6fd9a3;--acc:#ffb23f;--onacc:#1a1000;
   --c1:#1d2236;
   --c2:#4a5070;
   --c3:#cfd3e6;
@@ -23,8 +23,8 @@
   --c16:#4aa3ff;
   --c17:#4b5170;}
 html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
-svg{position:fixed;top:44px;left:0;width:100%;height:calc(100% - 44px);cursor:grab;font-family:var(--ui)}
-svg.drag{cursor:grabbing}
+svg#map{position:fixed;top:44px;left:0;width:100%;height:calc(100% - 44px);cursor:grab;font-family:var(--ui)}
+svg#map.drag{cursor:grabbing}
 .ring{fill:none;stroke:var(--c1);stroke-width:1} .ring.band{stroke-dasharray:2 5}
 .ringlbl{fill:var(--c2);font-size:12px;letter-spacing:.05em}
 .sun{filter:url(#glow)} .gtitle{fill:var(--c3);font-size:21px;font-weight:650;text-anchor:middle}
