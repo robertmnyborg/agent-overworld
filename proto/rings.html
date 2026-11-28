@@ -1,25 +1,28 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Overworld D: Rings</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lora:wght@400;500&family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-:root{--ui:-apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif;--mono:ui-monospace,Menlo,monospace;
-  --bg:#0e1118;--head:rgba(14,17,24,.95);--panel:#151924;--line:#2a3142;--fg:#e9ecf3;--mut:#8b93a7;--chip:#1e2433;--input:#0b0e14;
-  --hot:#f0a63a;--onhot:#1a1000;--good:#3fcf6a;--acc:#e9ecf3;--onacc:#0e1118;
-  /* categorical goal hues, dark steps, validated adjacent + wrap pair on #0e1118 */
-  --g1:#338ced;--g2:#e76624;--g3:#00a888;--g4:#d28e05;--g5:#e24d8b;--g6:#0aac23;
-  --ring:#232a3a;--ring-stale:#4a3a2a;--rlbl:#5d6680;--rlbl-stale:#a07a4a;--stalezone:rgba(240,166,58,.05);--halo:#0e1118}
+:root{--ui:"Poppins",-apple-system,BlinkMacSystemFont,"Helvetica Neue",Arial,sans-serif;--serif:"Lora",Georgia,"Times New Roman",serif;--mono:ui-monospace,Menlo,monospace;
+  /* Anthropic brand neutrals; soft blue replaces the orange accent */
+  --bg:#FAF9F5;--head:rgba(250,249,245,.96);--panel:#F5F3EC;--line:#E8E6DC;--fg:#141413;--mut:#6F6E68;--chip:#F0EEE6;--input:#FFFFFF;
+  --hot:#3F6F9F;--onhot:#FFFFFF;--good:#788C5D;--acc:#6A9BCC;--onacc:#141413;--shadow:rgba(20,20,19,.08);
+  /* goal hues, validated on #FAF9F5 (adjacent + wrap pair; tightest pair carries name labels) */
+  --g1:#4F8AC9;--g2:#C2475A;--g3:#00968A;--g4:#B8862A;--g5:#9A4F8C;--g6:#5F8A3A;
+  --ring:#E8E6DC;--ring-stale:#B0AEA5;--rlbl:#B0AEA5;--rlbl-stale:#8A8880;--stalezone:rgba(176,174,165,.10);--halo:#FAF9F5}
 html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
 svg#map{position:fixed;top:44px;left:0;width:100%;height:calc(100% - 44px);font-family:var(--ui)}
 .ring{fill:none;stroke:var(--ring);stroke-width:1} .ring.stale{stroke:var(--ring-stale);stroke-dasharray:3 4}
 .zone{fill:var(--stalezone)}
 .rlbl{fill:var(--rlbl);font-size:10px;font-variant-numeric:tabular-nums} .rlbl.stale{fill:var(--rlbl-stale)}
 .spoke{stroke:var(--line);stroke-width:2}
-.wedge{opacity:.11} .rim{fill:none;stroke-width:7}
-.sector{fill:var(--fg);font-size:13px;font-weight:650} .sector .n{fill:var(--mut);font-weight:400}
+.wedge{opacity:.13} .rim{fill:none;stroke-width:7}
+.sector{fill:var(--fg);font-size:13px;font-weight:600} .sector .n{fill:var(--mut);font-weight:400}
 .blip{cursor:pointer} .blip:hover .b{stroke:var(--fg);stroke-width:2}
 .b{stroke:var(--halo);stroke-width:2}
 .sel .b{stroke:var(--fg);stroke-width:3}
-.stalering{fill:none;stroke:var(--fg);stroke-width:1;stroke-dasharray:2 2;opacity:.6}
+.stalering{fill:none;stroke:var(--mut);stroke-width:1;stroke-dasharray:2 2;opacity:.8}
 .tag{fill:var(--fg);font-size:11.5px;pointer-events:none;paint-order:stroke;stroke:var(--bg);stroke-width:3px}
 .tag.age{fill:var(--mut);font-size:10.5px;font-variant-numeric:tabular-nums}
 .fade{opacity:.2}
@@ -27,6 +30,8 @@ svg#map{position:fixed;top:44px;left:0;width:100%;height:calc(100% - 44px);font-
 .mode{position:fixed;top:56px;left:14px;z-index:3;display:flex;background:var(--chip);border:1px solid var(--line);border-radius:8px;padding:2px;font:12.5px var(--ui)}
 .mode button{background:none;border:0;color:var(--mut);padding:5px 10px;border-radius:6px;cursor:pointer;font:inherit}
 .mode button.on{background:var(--panel);color:var(--fg)}
+.ow-ask-text,.ow-p-meta,.ow-full pre{font-family:var(--serif)!important} .ow-ask-text{font-size:16px!important;line-height:1.5}
+.ow-p-title{font-weight:600}
 .legend{position:fixed;left:14px;bottom:12px;color:var(--mut);font:12px/1.7 var(--ui);background:var(--head);padding:8px 12px;border:1px solid var(--line);border-radius:8px}
 .legend i{display:inline-block;width:9px;height:9px;margin:0 5px -1px 10px;background:var(--mut)}
 </style></head><body>
@@ -76,7 +81,7 @@ function render(data, { selected }) {
 }
 
 function renderOne(goals, w, h, selected, selGoal) {
-  const R = Math.min(w - 380, h - 30) / 2 - 30, cx = w / 2 + 40, cy = h / 2 + 8;
+  const R = Math.min(w - 520, h - 30) / 2 - 30, cx = w / 2, cy = h / 2 + 8;
   scope.setAttribute("transform", `translate(${cx},${cy})`);
   const total = goals.reduce((s, x) => s + 1 + x.g.tasks.length * 0.4 + x.g.tasks.reduce((n, t) => n + t.openAsks.length, 0) * 1.2, 0);
   let a0 = -Math.PI / 2;
@@ -108,11 +113,11 @@ function renderOne(goals, w, h, selected, selGoal) {
 function renderSplit(goals, w, h, selected, selGoal) {
   scope.setAttribute("transform", "translate(0,0)");
   const n = goals.length, cols = Math.max(1, Math.round(Math.sqrt(n * w / h))), rows = Math.ceil(n / cols);
-  const cw = w / cols, ch = (h - 20) / rows, R = Math.min(cw - 200, ch - 70) / 2;
+  const cw = w / cols, ch = (h - 40) / rows, R = Math.min(cw - 200, ch - 76) / 2;
   // busiest goals first, so the top-left scope is where the asks are
   const order = [...goals].sort((a, b) => b.g.tasks.reduce((n, t) => n + t.openAsks.length, 0) - a.g.tasks.reduce((n, t) => n + t.openAsks.length, 0));
   order.forEach((s, i) => {
-    const cx = (i % cols) * cw + cw / 2, cy = Math.floor(i / cols) * ch + ch / 2 + 22;
+    const cx = (i % cols) * cw + cw / 2, cy = Math.floor(i / cols) * ch + ch / 2 + 44;
     const G = S("g", { transform: `translate(${cx},${cy})`, class: selGoal && selGoal !== s.g ? "fade" : "" }, scope);
     S("circle", { r: R, fill: s.color, class: "wedge" }, G);
     S("circle", { r: R + 4, stroke: s.color, class: "rim" }, G);
