@@ -2325,6 +2325,55 @@ def triage_write(body):
         return t
 
 
+ASKS_LOG = Path.home() / ".overworld" / "asks.jsonl"  # one reading per ASKS_EVERY: open asks and asks waiting over 24h
+ASKS_EVERY = 600
+
+
+def _ts(x):
+    if isinstance(x, (int, float)):
+        return x / 1000 if x > 1e11 else x
+    return datetime.fromisoformat(x.replace("Z", "+00:00")).timestamp() if x else None
+
+
+def asks_reading():
+    """Open asks = sessions that need Robert, minus ones dismissed or blocked for their current ask (same rule as the prototypes)."""
+    t, now = triage_read(), time.time()
+    open_, stale = 0, 0
+    for r in state()["regions"]:
+        for s in r["sessions"]:
+            if not s.get("needs"):
+                continue
+            rec = t.get(s["id"])
+            if rec and rec["ask"] == (s.get("full") or s.get("ask") or "")[-400:] and (
+                    rec["verb"] == "dismiss" or (rec.get("until") or 0) / 1000 > now):
+                continue
+            open_ += 1
+            at = _ts(s.get("turn_at")) or _ts(s.get("since"))
+            if at and now - at > 86400:
+                stale += 1
+    return {"at": now, "open": open_, "stale": stale}
+
+
+def keep_asks():
+    """Background: log the asks reading so the map can show the trend."""
+    while True:
+        try:
+            with ASKS_LOG.open("a") as f:
+                f.write(json.dumps(asks_reading()) + "\n")
+        except (subprocess.SubprocessError, json.JSONDecodeError, KeyError, ValueError, OSError) as e:
+            print(f"{time.strftime('%H:%M:%S')} asks reading failed: {e!r}"[:400], flush=True)
+        time.sleep(ASKS_EVERY)
+
+
+def asks_history(days=7):
+    try:
+        rows = [json.loads(l) for l in ASKS_LOG.read_text().splitlines() if l.strip()]
+    except FileNotFoundError:
+        rows = []
+    cut = time.time() - days * 86400
+    return {"rows": [r for r in rows if r["at"] >= cut]}
+
+
 class Handler(BaseHTTPRequestHandler):
     def _send(self, code, body, ctype="application/json"):
         data = body if isinstance(body, bytes) else json.dumps(body).encode()
@@ -2375,6 +2424,8 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, timeline(self.path.split("=", 1)[1]))
         elif self.path == "/api/triage":
             self._send(200, triage_read())
+        elif self.path == "/api/asks-history":
+            self._send(200, asks_history())
         elif self.path.startswith("/proto/") and "/.." not in self.path:
             f = HERE / self.path.split("?", 1)[0].lstrip("/")
             if not f.is_file():
@@ -2517,4 +2568,5 @@ if __name__ == "__main__":
     threading.Thread(target=keep_usage, daemon=True).start()
     threading.Thread(target=keep_work, daemon=True).start()
     threading.Thread(target=keep_came_from, daemon=True).start()
+    threading.Thread(target=keep_asks, daemon=True).start()
     httpd.serve_forever()

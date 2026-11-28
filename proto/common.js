@@ -3,7 +3,7 @@
 // An ask = a session that needs Robert. Age = time since its last reply (turn_at), not cmux's relaunch time.
 "use strict";
 const OW = (() => {
-  const DAY = 86400e3;
+  const DAY = 86400e3, OW_DAY = DAY;
   const BLOCK_WORDS = /\b(review|grade|edit|read|look (it )?over|draft|write|record|walk through|go through|judge|rank|answer (the|their) open|fill|rewrite|audit|check the)\b/i;
   const DIY_TEXT = "Finish this yourself without waiting on me: make the call you would recommend, take the next step, then report what you did in 3 lines. If it truly needs me (approval to post or spend, or access only I have), say exactly what and why in one line.";
   let data = null, triage = {}, sent = JSON.parse(sessionStorage.getItem("ow.proto.sent") || "{}");
@@ -32,7 +32,7 @@ const OW = (() => {
   };
 
   async function load() {
-    const [st, gx, tr] = await Promise.all(["/api/state", "/api/galaxy", "/api/triage"].map(u => fetch(u).then(r => r.json())));
+    const [st, gx, tr, hist] = await Promise.all(["/api/state", "/api/galaxy", "/api/triage", "/api/asks-history"].map(u => fetch(u).then(r => r.json())));
     triage = tr;
     const sessions = st.regions.flatMap(r => r.sessions);
     const bySurface = Object.fromEntries(sessions.map(s => [s.id, s]));
@@ -73,7 +73,7 @@ const OW = (() => {
     const asks = all.flatMap(g => g.tasks.flatMap(t => t.openAsks)).sort((a, b) => (a.at || 0) - (b.at || 0));
     const stale = asks.filter(a => a.at && Date.now() - a.at > DAY).length;
     const set = all.flatMap(g => g.tasks.flatMap(t => t.asks));
-    data = { goals: all, asks, stale, dormant, parked, deadShells: sessions.filter(s => s.status === "shell").length,
+    data = { history: hist.rows, goals: all, asks, stale, dormant, parked, deadShells: sessions.filter(s => s.status === "shell").length,
       hiddenCount: { dismissed: set.filter(a => a.hide === "dismissed").length, blocked: set.filter(a => a.hide === "blocked").length, sent: set.filter(a => a.hide === "sent").length } };
     return data;
   }
@@ -94,6 +94,9 @@ const OW = (() => {
   .ow-head>*{white-space:nowrap;flex-shrink:0} .ow-head .ow-sub{flex-shrink:1;min-width:0}
   .ow-title{font-weight:650;letter-spacing:.02em}
   .ow-metric{font-weight:650;color:var(--hot)} .ow-metric.ok{color:var(--good)}
+  .ow-trend{display:flex;align-items:center;gap:6px;color:var(--mut);font-size:12px}
+  .ow-spark-line{fill:none;stroke:var(--hot);stroke-width:1.5} .ow-spark-goal{stroke:var(--good);stroke-dasharray:2 2;stroke-width:1}
+  .ow-delta.down{color:var(--good)} .ow-delta.up{color:var(--hot)}
   .ow-sub{color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .ow-flex{flex:1} .ow-nav{display:flex;gap:4px}
   .ow-nav a{color:var(--mut);text-decoration:none;padding:5px 9px;border-radius:6px} .ow-nav a:hover{color:var(--fg)}
@@ -131,7 +134,7 @@ const OW = (() => {
   function header(title, viewName) {
     const h = document.createElement("header");
     h.className = "ow-head";
-    h.innerHTML = `<b class="ow-title"></b><span class="ow-metric"></span><span class="ow-sub"></span><span class="ow-flex"></span><nav class="ow-nav"></nav>`;
+    h.innerHTML = `<b class="ow-title"></b><span class="ow-metric"></span><span class="ow-trend"><svg class="ow-spark" width="84" height="20"></svg><span class="ow-delta"></span></span><span class="ow-sub"></span><span class="ow-flex"></span><nav class="ow-nav"></nav>`;
     h.querySelector(".ow-title").textContent = title;
     const nav = h.querySelector(".ow-nav");
     [["A", "orbit"], ["B", "radar"], ["C", "atlas"]].forEach(([k, v]) => {
@@ -147,6 +150,20 @@ const OW = (() => {
     const m = document.querySelector(".ow-metric"), sub = document.querySelector(".ow-sub");
     m.textContent = `${data.stale} asks waiting over 24h`;
     m.classList.toggle("ok", data.stale < 5);
+    // trend: change against the reading closest to 24h ago, and a 7-day line of the same number
+    const rows = data.history || [], delta = document.querySelector(".ow-delta"), sp = document.querySelector(".ow-spark");
+    const dayAgo = rows.filter(r => r.at * 1000 <= Date.now() - 20 * 3600e3).pop();
+    if (dayAgo) { const d = data.stale - dayAgo.stale; delta.textContent = d === 0 ? "same as yesterday" : `${d < 0 ? "▼" : "▲"}${Math.abs(d)} since yesterday`; delta.className = "ow-delta " + (d < 0 ? "down" : d > 0 ? "up" : ""); }
+    else delta.textContent = rows.length ? `tracking since ${new Date(rows[0].at * 1000).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })}` : "first reading now";
+    const pts = [...rows.map(r => [r.at * 1000, r.stale]), [Date.now(), data.stale]];
+    const t0 = Date.now() - 7 * OW_DAY, max = Math.max(5, ...pts.map(p => p[1]));
+    sp.innerHTML = "";
+    const NSs = "http://www.w3.org/2000/svg", line = document.createElementNS(NSs, "polyline");
+    line.setAttribute("points", pts.map(([t, v]) => `${(Math.max(0, t - t0) / (7 * OW_DAY) * 82 + 1).toFixed(1)},${(19 - v / max * 17).toFixed(1)}`).join(" "));
+    line.setAttribute("class", "ow-spark-line"); sp.append(line);
+    const goal = document.createElementNS(NSs, "line"); const gy = (19 - 5 / max * 17).toFixed(1);
+    Object.entries({ x1: 0, x2: 84, y1: gy, y2: gy, class: "ow-spark-goal" }).forEach(([k, v]) => goal.setAttribute(k, v)); sp.append(goal);
+    sp.setAttribute("aria-label", `Asks waiting over 24h, last 7 days; goal under 5`);
     const hc = data.hiddenCount;
     sub.textContent = `${data.asks.length} open asks · cleared this visit ${cleared} · blocked ${hc.blocked} · dismissed ${hc.dismissed} · ${data.dormant} dormant items off the map · ${data.deadShells} dead shells`;
   }
