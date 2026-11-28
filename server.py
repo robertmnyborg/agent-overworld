@@ -2374,6 +2374,15 @@ def asks_history(days=7):
     return {"rows": [r for r in rows if r["at"] >= cut]}
 
 
+VIEW_LOG = Path.home() / ".overworld" / "view-log.jsonl"  # page opens, layout/distance switches and verbs, to see what gets used
+
+
+def log_view(body):
+    rec = {"at": time.time(), "event": str(body["event"])[:40], "detail": str(body.get("detail", ""))[:120]}
+    with VIEW_LOG.open("a") as f:
+        f.write(json.dumps(rec) + "\n")
+
+
 class Handler(BaseHTTPRequestHandler):
     def _send(self, code, body, ctype="application/json"):
         data = body if isinstance(body, bytes) else json.dumps(body).encode()
@@ -2431,7 +2440,10 @@ class Handler(BaseHTTPRequestHandler):
             if not f.is_file():
                 return self._send(404, {"error": "not found"})
             self._send(200, f.read_bytes(), "application/javascript" if f.suffix == ".js" else "text/html; charset=utf-8")
-        elif self.path in ("/", "/index.html"):
+        elif self.path in ("/", "/rings"):
+            # default view (Robert's pick 2026-11-27): Rings, distance = lanes; the earlier map lives at /classic
+            self._send(200, (HERE / "proto" / "rings.html").read_bytes(), "text/html; charset=utf-8")
+        elif self.path in ("/classic", "/index.html"):
             self._send(200, (HERE / "index.html").read_bytes(), "text/html; charset=utf-8")
         else:
             self._send(404, {"error": "not found"})
@@ -2501,6 +2513,11 @@ class Handler(BaseHTTPRequestHandler):
             if out.returncode:
                 print(f"{time.strftime('%H:%M:%S')} send failed: {out.stderr.strip()[:300]}", flush=True)
                 return self._send(502, {"error": out.stderr.strip()[:300] or f"cmux exited {out.returncode}"})
+        elif self.path == "/api/log":
+            try:
+                log_view(body)
+            except KeyError as e:
+                return self._send(400, {"error": repr(e)})
         elif self.path == "/api/triage":
             try:
                 return self._send(200, triage_write(body))

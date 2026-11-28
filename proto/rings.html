@@ -63,7 +63,7 @@ const DIST = {
   score:  { label: "Priority", note: "Centre = do first. Score = someone else involved 35% + decision 20% + agent still running 15% + wait up to 14d 30%; over 30d fades" },
   lanes:  { label: "Lanes", note: "Rings are kinds of ask, inside out: someone else involved · decision · quick reply · work block · stale over 14d · nothing needed" },
 };
-let dist = localStorage.getItem("ow.rings.dist") || "wait";
+let dist = localStorage.getItem("ow.rings.dist2") || "lanes";
 const STALE_D = 14;
 const involved = t => (t.askedBy && t.askedBy.length) || (t.people && t.people.length) ? 1 : 0;
 const isDecision = t => t.openAsks.some(a => a.kind === "decision");
@@ -259,9 +259,9 @@ function withBurst(data) {
   }
   return { ...data, goals };
 }
-document.querySelectorAll(".mode button[data-d]").forEach(b => b.onclick = () => { dist = b.dataset.d; localStorage.setItem("ow.rings.dist", dist); OW.data && render(OW.data, { selected: OW.selected }); });
+document.querySelectorAll(".mode button[data-d]").forEach(b => b.onclick = () => { dist = b.dataset.d; localStorage.setItem("ow.rings.dist2", dist); OW.log("distance", dist); OW.data && render(OW.data, { selected: OW.selected }); });
 document.querySelector(".mode button[data-burst]").onclick = () => { burst = !burst; OW.data && render(OW.data, { selected: OW.selected }); };
-function setMode(m) { mode = m; localStorage.setItem("ow.rings.mode", m); OW.data && render(OW.data, { selected: OW.selected }); }
+function setMode(m) { mode = m; localStorage.setItem("ow.rings.mode", m); OW.log("layout", m); OW.data && render(OW.data, { selected: OW.selected }); }
 document.querySelectorAll(".mode button[data-m]").forEach(b => b.onclick = () => setMode(b.dataset.m));
 addEventListener("keydown", e => { if (e.key === "v" && !(e.target.closest && e.target.closest("textarea,input"))) setMode(mode === "one" ? "split" : "one"); });
 svg.onclick = () => OW.close();
