@@ -127,6 +127,6 @@ svg.addEventListener("wheel", e => {
   apply();
 }, { passive: false });
 svg.onclick = () => { if (!moved) OW.close(); };
-addEventListener("keydown", e => { if (e.key === "0" && !e.target.closest("textarea")) { fitted = false; OW.data && render(OW.data, { selected: OW.selected }); } });
+addEventListener("keydown", e => { if (e.key === "0" && !(e.target.closest && e.target.closest("textarea"))) { fitted = false; OW.data && render(OW.data, { selected: OW.selected }); } });
 OW.start("Overworld · Atlas", "atlas", render);
 </script></body></html>
