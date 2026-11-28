@@ -376,3 +376,9 @@ Review screenshots: `.shots/review-*.png`; after: `.shots/fix-*.png`.
   - **Inbox (`3`/`i`):** Fast keyboard triage split (`356px` rail + live markdown/decision/composer + 5-tab Turn Diagnostics + recent tool steps), diffed across 3s polls so active drafts never reset.
   - **Unified non-blocking Peek drawer:** Shared 500px right slide-over for both Galaxy work items (History SVG, Linked items, Projects/PRs/Slack/Files, Dock/Park/Done/Resume, inline Reply) and Spaces sessions (Decision box, quick options, Markdown, Reply composer, 5-tab Diagnostics) with no modal blackout scrim.
 - Verified on read-only test server (`:7721`): `impeccable detect --json` `[]`, `evals/walk.mjs` `S2 = 2` clicks (`/api/dock`), `0` console errors, `0` label collisions, `0` horizontal overflow at 1440x900 and 900x900, and Spaces DOM identity preserved across 3s poll (`pollStable: true`).
+
+## 2026-11-27 (product self-interview, no code changed)
+- Robert: "not seeing the progress I wanted." Report: `plans/product-eval-2026-11-27.md` (agy's independent interview to be appended).
+- Measured: 18 needs-you, 12 of them 5.9d old, flat since 11-26; 3+ live false flags while golden S1 is 18/18; 128 work items, 0 ever parked or done; no view-usage logging; most checks synthetic.
+- Proposed north star: open asks older than 24h (today 18). Proposed next build: drain pass (Reply / Do it yourself / Block time / Dismiss) + auto-park dormant items. Cheapest test first: view + verb logging and one hand-tagged pass over today's 18.
+- agy interview appended; it agrees on the metric and the cuts, and found true ask ages are 6.5-47d (backlog #48). Waits on: Robert picks the next build.

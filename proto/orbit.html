@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Overworld A: Orbit</title>
+<style>
+:root{--ui:-apple-system,BlinkMacSystemFont,"SF Pro Text",Inter,sans-serif;--mono:ui-monospace,Menlo,monospace;
+  --bg:#07080d;--head:rgba(10,12,20,.92);--panel:#0f1220;--line:#262b40;--fg:#e8eaf3;--mut:#8c92ab;--chip:#1b2033;--input:#0a0c16;
+  --hot:#ffb23f;--onhot:#1a1000;--good:#6fd9a3;--acc:#ffb23f;--onacc:#1a1000}
+html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+svg{position:fixed;top:44px;left:0;width:100%;height:calc(100% - 44px);cursor:grab;font-family:var(--ui)}
+svg.drag{cursor:grabbing}
+.ring{fill:none;stroke:#1d2236;stroke-width:1} .ring.band{stroke-dasharray:2 5}
+.ringlbl{fill:#4a5070;font-size:12px;letter-spacing:.05em}
+.sun{filter:url(#glow)} .gtitle{fill:#cfd3e6;font-size:21px;font-weight:650;text-anchor:middle}
+.gcount{fill:#8c92ab;font-size:14px;text-anchor:middle}
+.body{cursor:pointer;transition:opacity .2s} .body:hover .orb{stroke:#fff;stroke-width:2}
+.orb{stroke:rgba(255,255,255,.12)}
+.lbl{fill:#e8eaf3;font-size:15px;pointer-events:none;paint-order:stroke;stroke:#07080d;stroke-width:3px}
+.lbl.dim{fill:#6c7290;font-size:12px}
+.age{fill:#ffcf8a;font-size:13px;font-weight:650;pointer-events:none;text-anchor:middle;paint-order:stroke;stroke:#07080d;stroke-width:3px}
+.sel .orb{stroke:#fff;stroke-width:2.5}
+.fade{opacity:.25}
+.pulse{animation:p 2.4s ease-out infinite;transform-box:fill-box;transform-origin:center}
+@keyframes p{0%{opacity:.7;transform:scale(1)}100%{opacity:0;transform:scale(2.3)}}
+.legend{position:fixed;left:14px;bottom:12px;color:#8c92ab;font:12px/1.6 var(--ui);background:rgba(10,12,20,.8);padding:8px 12px;border-radius:8px;border:1px solid var(--line)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin:0 5px -1px 10px}
+</style></head><body>
+<svg id="map"><defs>
+  <filter id="glow" x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="9" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  <radialGradient id="sunG"><stop offset="0" stop-color="#fff8e0"/><stop offset=".45" stop-color="#ffd27a"/><stop offset="1" stop-color="#ff8a2a"/></radialGradient>
+  <radialGradient id="shade" cx=".35" cy=".3"><stop offset="0" stop-color="#fff" stop-opacity=".35"/><stop offset=".6" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".45"/></radialGradient>
+</defs><g id="cam"></g></svg>
+<div class="legend">Asks fall toward the sun as they wait: inner ring = oldest.
+  <i style="background:#ff5a3c"></i>7d+ <i style="background:#ff8f3c"></i>3-7d <i style="background:#ffb23f"></i>1-3d <i style="background:#ffe08a"></i>&lt;1d
+  <i style="background:#4aa3ff"></i>working <i style="background:#4b5170"></i>open, nothing needed · big = needs a work block · n = next ask</div>
+<script src="/proto/common.js"></script>
+<script>
+"use strict";
+const NS = "http://www.w3.org/2000/svg", svg = document.getElementById("map"), cam = document.getElementById("cam");
+const S = (tag, attrs = {}, parent) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; };
+const BANDS = [{ min: 7, r: 78, c: "#ff5a3c", l: "7d+" }, { min: 3, r: 118, c: "#ff8f3c", l: "3-7d" }, { min: 1, r: 158, c: "#ffb23f", l: "1-3d" }, { min: 0, r: 198, c: "#ffe08a", l: "<1d" }];
+const OUTER = 250, SYS = 300;
+let view = { x: 0, y: 0, k: 1 }, fitted = false, layoutKey = "";
+
+function band(at) { const d = (Date.now() - at) / OW.DAY; return BANDS.find(b => d >= b.min); }
+function apply() { cam.setAttribute("transform", `translate(${view.x},${view.y}) scale(${view.k})`); }
+
+function layout(goals) {
+  const w = svg.clientWidth - (OW.selected ? 440 : 0), h = svg.clientHeight - 56;
+  const n = goals.length, cols = Math.max(1, Math.round(Math.sqrt(n * w / h))), rows = Math.ceil(n / cols);
+  // biggest systems first so the eye lands on where the asks are
+  const order = [...goals].sort((a, b) => b.tasks.reduce((s, t) => s + t.openAsks.length, 0) - a.tasks.reduce((s, t) => s + t.openAsks.length, 0));
+  order.forEach((g, i) => { g.cx = (i % cols) * SYS * 2.05 + SYS; g.cy = Math.floor(i / cols) * SYS * 2.05 + SYS; });
+  return { W: cols * SYS * 2.05, H: rows * SYS * 2.05, w, h };
+}
+function fit(L) { view.k = Math.min(L.w / L.W, L.h / L.H) * 0.96; view.x = (L.w - L.W * view.k) / 2; view.y = (L.h - L.H * view.k) / 2; apply(); }
+
+function render(data, { selected }) {
+  const L = layout(data.goals);
+  const key = data.goals.map(g => g.id).join() + "|" + L.w + "x" + L.h;
+  if (!fitted || key !== layoutKey) { fit(L); fitted = true; layoutKey = key; }
+  cam.replaceChildren();
+  const selGoal = selected && data.goals.find(g => g.tasks.some(t => t.id === selected));
+  for (const g of data.goals) {
+    const G = S("g", { transform: `translate(${g.cx},${g.cy})`, class: selGoal && selGoal !== g ? "fade" : "" }, cam);
+    BANDS.forEach(b => { S("circle", { r: b.r, class: "ring band" }, G); S("text", { x: 4, y: -b.r - 3, class: "ringlbl" }, G).textContent = b.l; });
+    S("circle", { r: OUTER, class: "ring" }, G);
+    const asks = g.tasks.reduce((s, t) => s + t.openAsks.length, 0);
+    S("circle", { r: 26 + Math.min(18, asks * 3), fill: asks ? "url(#sunG)" : "#3a3f58", class: "sun" }, G);
+    S("text", { y: -OUTER - 24, class: "gtitle" }, G).textContent = g.title;
+    S("text", { y: -OUTER - 4, class: "gcount" }, G).textContent = `${asks} need you · ${g.tasks.length} open`;
+    // asks on age bands
+    const needs = g.tasks.filter(t => t.openAsks.length), rest = g.tasks.filter(t => !t.openAsks.length);
+    const byBand = new Map(BANDS.map(b => [b, []]));
+    needs.forEach(t => byBand.get(band(t.oldest)).push(t));
+    let phase = (g.id.charCodeAt(1) || 0) * 0.7;
+    for (const [b, ts] of byBand) {
+      ts.sort((x, y) => x.oldest - y.oldest);
+      ts.forEach((t, i) => {
+        const a = phase + (i / Math.max(ts.length, 1)) * Math.PI * 2;
+        body(G, t, Math.cos(a) * b.r, Math.sin(a) * b.r, b.c, t.openAsks.some(x => x.effort === "block") ? 15 : 10, selected, true);
+      });
+      phase += 1.1;
+    }
+    rest.sort((x, y) => (y.lastActive || 0) - (x.lastActive || 0)).forEach((t, i) => {
+      const a = -Math.PI / 2 + (i / Math.max(rest.length, 1)) * Math.PI * 2;
+      body(G, t, Math.cos(a) * OUTER, Math.sin(a) * OUTER, t.status === "working" ? "#4aa3ff" : "#4b5170", t.status === "working" ? 7 : 5, selected, false);
+    });
+  }
+}
+
+function body(G, t, x, y, color, r, selected, isAsk) {
+  const B = S("g", { transform: `translate(${x},${y})`, class: "body" + (selected === t.id ? " sel" : "") }, G);
+  if (isAsk && Date.now() - t.oldest > OW.DAY) S("circle", { r: r + 2, fill: "none", stroke: color, "stroke-width": 2, class: "pulse" }, B);
+  S("circle", { r, fill: color, class: "orb" }, B);
+  S("circle", { r, fill: "url(#shade)", "pointer-events": "none" }, B);
+  if (t.openAsks.length > 1) S("text", { y: 3.5, class: "age", style: "fill:#1a1000;stroke:none" }, B).textContent = t.openAsks.length;
+  if (isAsk) {
+    S("text", { y: -r - 5, class: "age" }, B).textContent = OW.ago(t.oldest);
+    const lb = S("text", { x: r + 6, y: 4, class: "lbl" }, B); lb.textContent = t.title.length > 30 ? t.title.slice(0, 29) + "…" : t.title;
+    if (x < 0) { lb.setAttribute("x", -r - 6); lb.setAttribute("text-anchor", "end"); }
+  } else if (t.status === "working") {
+    const lb = S("text", { x: r + 5, y: 3, class: "lbl dim" }, B); lb.textContent = t.title.slice(0, 26);
+    if (x < 0) { lb.setAttribute("x", -r - 5); lb.setAttribute("text-anchor", "end"); }
+  }
+  B.onclick = e => { e.stopPropagation(); OW.open(t.id); };
+  B.onmousemove = e => OW.showTip(e, t.title, t.openAsks.length ? `${t.openAsks[0].text}` : t.status === "working" ? "Working" : `Last active ${t.lastActive ? OW.ago(t.lastActive) + " ago" : "?"}`);
+  B.onmouseleave = OW.hideTip;
+}
+
+// pan + zoom
+let drag = null, moved = false;
+svg.onmousedown = e => { drag = { x: e.clientX - view.x, y: e.clientY - view.y }; moved = false; svg.classList.add("drag"); };
+addEventListener("mousemove", e => { if (!drag) return; moved = true; view.x = e.clientX - drag.x; view.y = e.clientY - drag.y; apply(); });
+addEventListener("mouseup", () => { drag = null; svg.classList.remove("drag"); });
+svg.addEventListener("wheel", e => {
+  e.preventDefault();
+  if (e.ctrlKey || e.metaKey) { const f = Math.exp(-e.deltaY * 0.01), r = svg.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
+    view.x = mx - (mx - view.x) * f; view.y = my - (my - view.y) * f; view.k *= f; }
+  else { view.x -= e.deltaX; view.y -= e.deltaY; }
+  apply();
+}, { passive: false });
+svg.onclick = () => { if (!moved) OW.close(); };
+addEventListener("keydown", e => { if (e.key === "0" && !e.target.closest("textarea")) { fitted = false; OW.data && render(OW.data, { selected: OW.selected }); } });
+OW.start("Overworld · Orbit", "orbit", render);
+</script></body></html>
