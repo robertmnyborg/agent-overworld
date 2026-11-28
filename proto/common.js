@@ -80,6 +80,10 @@ const OW = (() => {
     return data;
   }
 
+  function log(event, detail) {
+    fetch("/api/log", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ event, detail: detail || "" }) })
+      .then(r => { if (!r.ok) console.warn("usage log failed", r.status); }, e => console.warn("usage log failed", e));
+  }
   async function post(path, body) {
     const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     const j = await r.json().catch(() => ({}));
@@ -141,11 +145,11 @@ const OW = (() => {
     const nav = h.querySelector(".ow-nav");
     [["A", "orbit"], ["B", "radar"], ["C", "atlas"], ["D", "rings"]].forEach(([k, v]) => {
       const a = document.createElement("a");
-      a.href = `/proto/${v}.html`; a.textContent = `${k} ${v[0].toUpperCase()}${v.slice(1)}`;
+      a.href = v === "rings" ? "/" : `/proto/${v}.html`; a.textContent = `${k} ${v[0].toUpperCase()}${v.slice(1)}`;
       if (v === viewName) a.className = "on";
       nav.appendChild(a);
     });
-    const live = document.createElement("a"); live.href = "/"; live.textContent = "Live map"; nav.appendChild(live);
+    const live = document.createElement("a"); live.href = "/classic"; live.textContent = "Classic map"; nav.appendChild(live);
     document.body.prepend(h);
   }
   function paintHeader() {
@@ -181,6 +185,7 @@ const OW = (() => {
   function findTask(id) { for (const g of data.goals) for (const t of g.tasks) if (t.id === id) return t; return null; }
 
   function open(taskId) {
+    if (taskId !== openId) log("panel", taskId);
     openId = taskId;
     paintPanel();
     if (renderFn) renderFn(data, { selected: openId });
@@ -239,29 +244,29 @@ const OW = (() => {
       const chips = el("div", "ow-chips");
       a.options.forEach(o => {
         const c = el("button", "ow-chip", o);
-        c.onclick = () => { if (c.dataset.armed) send(o).then(() => done("Sent: " + o)).catch(fail); else { c.dataset.armed = 1; c.textContent = "Send: " + o; } };
+        c.onclick = () => { if (c.dataset.armed) send(o).then(() => { log("verb", "option"); done("Sent: " + o); }).catch(fail); else { c.dataset.armed = 1; c.textContent = "Send: " + o; } };
         chips.append(c);
       });
       box.append(chips);
     }
     const ta = el("textarea", "ow-reply"); ta.rows = 2; ta.placeholder = "Reply (Enter sends, Shift+Enter new line)";
     ta.onfocus = () => typing = true; ta.onblur = () => typing = !!ta.value;
-    ta.onkeydown = e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (ta.value.trim()) send(ta.value).then(() => done("Reply sent")).catch(fail); } };
+    ta.onkeydown = e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (ta.value.trim()) send(ta.value).then(() => { log("verb", "reply"); done("Reply sent"); }).catch(fail); } };
     box.append(ta);
 
     const verbs = el("div", "ow-verbs");
     const v = (label, key, fn, cls = "") => { const b = el("button", "ow-btn " + cls, label); b.title = key; b.onclick = fn; verbs.append(b); return b; };
-    v("Reply", "r", () => { if (ta.value.trim()) send(ta.value).then(() => done("Reply sent")).catch(fail); else ta.focus(); }, "primary");
-    v("Do it yourself", "d", () => send(DIY_TEXT).then(() => done("Handed back: the agent will finish and report")).catch(fail));
+    v("Reply", "r", () => { if (ta.value.trim()) send(ta.value).then(() => { log("verb", "reply"); done("Reply sent"); }).catch(fail); else ta.focus(); }, "primary");
+    v("Do it yourself", "d", () => send(DIY_TEXT).then(() => { log("verb", "do-it-yourself"); done("Handed back: the agent will finish and report"); }).catch(fail));
     const blk = v("Block time ▾", "b", () => menu.hidden = !menu.hidden);
-    v("Dismiss", "x", () => post("/api/triage", { id: a.id, ask: askKey(a.session), verb: "dismiss" }).then(() => done("Dismissed until a new reply", true)).catch(fail));
+    v("Dismiss", "x", () => post("/api/triage", { id: a.id, ask: askKey(a.session), verb: "dismiss" }).then(() => { log("verb", "dismiss"); done("Dismissed until a new reply", true); }).catch(fail));
     const fo = v(a.exited ? "Open tab to resume" : "Open tab", "o", () => post("/api/focus", { workspace: a.session.workspace, surface: a.id }), a.exited ? "primary" : "ghost");
     if (a.exited) { verbs.querySelectorAll("button").forEach(b => { if (b !== fo && b !== blk && b.textContent !== "Dismiss") b.disabled = true; }); ta.disabled = true; box.querySelectorAll(".ow-chip").forEach(c => c.disabled = true); verbs.firstChild.classList.remove("primary"); }
     const menu = el("div", "ow-menu"); menu.hidden = true;
     const at9 = (addDays, weekday) => { const d = new Date(); d.setHours(9, 0, 0, 0); if (weekday != null) { do d.setDate(d.getDate() + 1); while (d.getDay() !== weekday); } else d.setDate(d.getDate() + addDays); return d.getTime(); };
     [["In 3 hours", Date.now() + 3 * 3600e3], ["Tomorrow 9am", at9(1)], ["Monday 9am", at9(0, 1)], ["Next week", at9(7)]].forEach(([l, until]) => {
       const b = el("button", "ow-btn", l);
-      b.onclick = () => post("/api/triage", { id: a.id, ask: askKey(a.session), verb: "block", until }).then(() => done(`Blocked until ${new Date(until).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })}`, true)).catch(fail);
+      b.onclick = () => post("/api/triage", { id: a.id, ask: askKey(a.session), verb: "block", until }).then(() => log("verb", "block")).then(() => done(`Blocked until ${new Date(until).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })}`, true)).catch(fail);
       menu.append(b);
     });
     box.append(verbs, menu, status);
@@ -286,6 +291,7 @@ const OW = (() => {
 
   function start(title, viewName, render) {
     renderFn = render;
+    log("open", viewName);
     header(title, viewName);
     document.body.append(panel);
     document.addEventListener("keydown", e => {
@@ -308,5 +314,5 @@ const OW = (() => {
   function showTip(e, title, line) { if (!tip.isConnected) document.body.append(tip); tip.hidden = false; tip.replaceChildren(el("b", null, title), el("span", null, line || "")); tip.style.left = Math.min(innerWidth - 340, e.clientX + 14) + "px"; tip.style.top = (e.clientY + 14) + "px"; }
   function hideTip() { tip.hidden = true; }
 
-  return { showTip, hideTip, start, open, close, ago, DAY, get data() { return data; }, get selected() { return openId; } };
+  return { log, showTip, hideTip, start, open, close, ago, DAY, get data() { return data; }, get selected() { return openId; } };
 })();
