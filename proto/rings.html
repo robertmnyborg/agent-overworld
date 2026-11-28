@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Overworld D: Rings</title>
+<style>
+:root{--ui:-apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif;--mono:ui-monospace,Menlo,monospace;
+  --bg:#0e1118;--head:rgba(14,17,24,.95);--panel:#151924;--line:#2a3142;--fg:#e9ecf3;--mut:#8b93a7;--chip:#1e2433;--input:#0b0e14;
+  --hot:#f0a63a;--onhot:#1a1000;--good:#3fcf6a;--acc:#e9ecf3;--onacc:#0e1118;
+  /* categorical goal hues, dark steps, validated adjacent + wrap pair on #0e1118 */
+  --g1:#338ced;--g2:#e76624;--g3:#00a888;--g4:#d28e05;--g5:#e24d8b;--g6:#0aac23;
+  --ring:#232a3a;--ring-stale:#4a3a2a;--rlbl:#5d6680;--rlbl-stale:#a07a4a;--stalezone:rgba(240,166,58,.05);--halo:#0e1118}
+html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+svg#map{position:fixed;top:44px;left:0;width:100%;height:calc(100% - 44px);font-family:var(--ui)}
+.ring{fill:none;stroke:var(--ring);stroke-width:1} .ring.stale{stroke:var(--ring-stale);stroke-dasharray:3 4}
+.zone{fill:var(--stalezone)}
+.rlbl{fill:var(--rlbl);font-size:10px;font-variant-numeric:tabular-nums} .rlbl.stale{fill:var(--rlbl-stale)}
+.spoke{stroke:var(--line);stroke-width:2}
+.wedge{opacity:.11} .rim{fill:none;stroke-width:7}
+.sector{fill:var(--fg);font-size:13px;font-weight:650} .sector .n{fill:var(--mut);font-weight:400}
+.blip{cursor:pointer} .blip:hover .b{stroke:var(--fg);stroke-width:2}
+.b{stroke:var(--halo);stroke-width:2}
+.sel .b{stroke:var(--fg);stroke-width:3}
+.stalering{fill:none;stroke:var(--fg);stroke-width:1;stroke-dasharray:2 2;opacity:.6}
+.tag{fill:var(--fg);font-size:11.5px;pointer-events:none;paint-order:stroke;stroke:var(--bg);stroke-width:3px}
+.tag.age{fill:var(--mut);font-size:10.5px;font-variant-numeric:tabular-nums}
+.fade{opacity:.2}
+.stitle{fill:var(--fg);font-size:14px;font-weight:650;text-anchor:middle} .scount{fill:var(--mut);font-size:11.5px;text-anchor:middle}
+.mode{position:fixed;top:56px;left:14px;z-index:3;display:flex;background:var(--chip);border:1px solid var(--line);border-radius:8px;padding:2px;font:12.5px var(--ui)}
+.mode button{background:none;border:0;color:var(--mut);padding:5px 10px;border-radius:6px;cursor:pointer;font:inherit}
+.mode button.on{background:var(--panel);color:var(--fg)}
+.legend{position:fixed;left:14px;bottom:12px;color:var(--mut);font:12px/1.7 var(--ui);background:var(--head);padding:8px 12px;border:1px solid var(--line);border-radius:8px}
+.legend i{display:inline-block;width:9px;height:9px;margin:0 5px -1px 10px;background:var(--mut)}
+</style></head><body>
+<svg id="map"><g id="scope"></g></svg>
+<div class="mode" role="tablist"><button data-m="one">One scope</button><button data-m="split">Per goal</button></div>
+<div class="legend">Center = just replied · rings = time since its last reply · past the dashed ring = over 7 days<br>
+  colour = goal · <i style="border-radius:50%"></i>action <i style="transform:rotate(45deg)"></i>decision · big = needs a work block ·
+  <i style="background:none;border:1px solid var(--mut);border-radius:50%"></i>open, nothing needed · v = switch layout · n = next ask</div>
+<script src="/proto/common.js"></script>
+<script>
+"use strict";
+const NS = "http://www.w3.org/2000/svg", svg = document.getElementById("map"), scope = document.getElementById("scope");
+const S = (tag, attrs = {}, parent) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; };
+const RINGS = [[1 / 24, "1h"], [1, "1d"], [3, "3d"], [7, "7d"], [30, "30d"]], MAXD = 60;
+const frac = d => 0.1 + 0.9 * Math.log1p(Math.max(0, d) * 24) / Math.log1p(MAXD * 24);
+let mode = localStorage.getItem("ow.rings.mode") || "one";
+// colour follows the goal, never its rank: hue slot is fixed by the goal's position in the galaxy's own order
+const hueOf = (g, i) => `var(--g${(i % 6) + 1})`;
+
+function ageDays(t) { return (Date.now() - (t.openAsks.length ? t.oldest : (t.lastActive || Date.now()))) / OW.DAY; }
+
+function rings(G, R) {
+  const r7 = frac(7) * R;
+  S("path", { d: `M ${-R} 0 A ${R} ${R} 0 1 0 ${R} 0 A ${R} ${R} 0 1 0 ${-R} 0 M ${-r7} 0 A ${r7} ${r7} 0 1 1 ${r7} 0 A ${r7} ${r7} 0 1 1 ${-r7} 0`, class: "zone", "fill-rule": "evenodd" }, G);
+  RINGS.forEach(([d, l]) => { const r = frac(d) * R; S("circle", { r, class: "ring" + (d >= 7 ? " stale" : "") }, G); if (R > 120 || d === 1 || d === 7) S("text", { x: 3, y: -r - 3, class: "rlbl" + (d >= 7 ? " stale" : "") }, G).textContent = l; });
+  S("circle", { r: R, class: "ring" }, G);
+}
+
+function placeTasks(G, g, color, a0, span, R, selected) {
+  const askT = g.tasks.filter(t => t.openAsks.length).sort((x, y) => x.oldest - y.oldest);
+  const restT = g.tasks.filter(t => !t.openAsks.length);
+  const spread = (list, off) => list.map((t, i) => [t, a0 + span * (0.08 + 0.84 * (list.length === 1 ? 0.5 : (i + off) / (list.length - 1 + off * 2)))]);
+  [...spread(restT, 0.5), ...spread(askT, 0)].forEach(([t, ang]) => {
+    const r = frac(Math.min(ageDays(t), MAXD)) * R;
+    blip(G, t, Math.cos(ang) * r, Math.sin(ang) * r, color, selected, ang);
+  });
+}
+
+function render(data, { selected }) {
+  document.querySelectorAll(".mode button").forEach(b => b.classList.toggle("on", b.dataset.m === mode));
+  const w = svg.clientWidth - (selected ? 440 : 0), h = svg.clientHeight - 56;
+  scope.replaceChildren();
+  const goals = data.goals.map((g, i) => ({ g, color: hueOf(g, data.goalsOrder ? data.goalsOrder.indexOf(g.id) : i) }));
+  const selGoal = selected && data.goals.find(g => g.tasks.some(t => t.id === selected));
+  if (mode === "one") renderOne(goals, w, h, selected, selGoal); else renderSplit(goals, w, h, selected, selGoal);
+  declutter();
+}
+
+function renderOne(goals, w, h, selected, selGoal) {
+  const R = Math.min(w - 380, h - 30) / 2 - 30, cx = w / 2 + 40, cy = h / 2 + 8;
+  scope.setAttribute("transform", `translate(${cx},${cy})`);
+  const total = goals.reduce((s, x) => s + 1 + x.g.tasks.length * 0.4 + x.g.tasks.reduce((n, t) => n + t.openAsks.length, 0) * 1.2, 0);
+  let a0 = -Math.PI / 2;
+  const sectors = goals.map(x => { const wt = 1 + x.g.tasks.length * 0.4 + x.g.tasks.reduce((n, t) => n + t.openAsks.length, 0) * 1.2; const s = { ...x, a0, span: wt / total * Math.PI * 2 }; a0 += s.span; return s; });
+  // wedges first, then rings over them, so each goal reads as a coloured slice
+  for (const s of sectors) {
+    const a1 = s.a0 + s.span, big = s.span > Math.PI ? 1 : 0;
+    S("path", { d: `M0 0 L${Math.cos(s.a0) * R} ${Math.sin(s.a0) * R} A${R} ${R} 0 ${big} 1 ${Math.cos(a1) * R} ${Math.sin(a1) * R} Z`, fill: s.color, class: "wedge" + (selGoal && selGoal !== s.g ? " fade" : "") }, scope);
+    const rr = R + 4;
+    S("path", { d: `M${Math.cos(s.a0 + 0.01) * rr} ${Math.sin(s.a0 + 0.01) * rr} A${rr} ${rr} 0 ${big} 1 ${Math.cos(a1 - 0.01) * rr} ${Math.sin(a1 - 0.01) * rr}`, stroke: s.color, class: "rim" }, scope);
+  }
+  rings(scope, R);
+  for (const s of sectors) {
+    S("line", { x1: 0, y1: 0, x2: Math.cos(s.a0) * R, y2: Math.sin(s.a0) * R, class: "spoke" }, scope);
+    const mid = s.a0 + s.span / 2, lx = Math.cos(mid) * (R + 26), ly = Math.sin(mid) * (R + 26);
+    const asks = s.g.tasks.reduce((n, t) => n + t.openAsks.length, 0);
+    const anchor = Math.abs(Math.cos(mid)) < 0.25 ? "middle" : Math.cos(mid) > 0 ? "start" : "end";
+    const L = S("g", { class: selGoal && selGoal !== s.g ? "fade" : "" }, scope);
+    const tx = S("text", { x: lx, y: ly + 4, class: "sector", "text-anchor": anchor }, L);
+    tx.textContent = s.g.title + " ";
+    S("tspan", { class: "n" }, tx).textContent = `${asks} need you`;
+    const bb = tx.getBBox();
+    S("rect", { x: bb.x - 15, y: bb.y + bb.height / 2 - 5, width: 10, height: 10, rx: 2, fill: s.color }, L);
+    const G = S("g", { class: selGoal && selGoal !== s.g ? "fade" : "" }, scope);
+    placeTasks(G, s.g, s.color, s.a0, s.span, R, selected);
+  }
+}
+
+function renderSplit(goals, w, h, selected, selGoal) {
+  scope.setAttribute("transform", "translate(0,0)");
+  const n = goals.length, cols = Math.max(1, Math.round(Math.sqrt(n * w / h))), rows = Math.ceil(n / cols);
+  const cw = w / cols, ch = (h - 20) / rows, R = Math.min(cw - 200, ch - 70) / 2;
+  // busiest goals first, so the top-left scope is where the asks are
+  const order = [...goals].sort((a, b) => b.g.tasks.reduce((n, t) => n + t.openAsks.length, 0) - a.g.tasks.reduce((n, t) => n + t.openAsks.length, 0));
+  order.forEach((s, i) => {
+    const cx = (i % cols) * cw + cw / 2, cy = Math.floor(i / cols) * ch + ch / 2 + 22;
+    const G = S("g", { transform: `translate(${cx},${cy})`, class: selGoal && selGoal !== s.g ? "fade" : "" }, scope);
+    S("circle", { r: R, fill: s.color, class: "wedge" }, G);
+    S("circle", { r: R + 4, stroke: s.color, class: "rim" }, G);
+    rings(G, R);
+    const asks = s.g.tasks.reduce((n, t) => n + t.openAsks.length, 0);
+    const t = S("text", { y: -R - 26, class: "stitle" }, G); t.textContent = s.g.title;
+    S("text", { y: -R - 11, class: "scount" }, G).textContent = `${asks} need you · ${s.g.tasks.length} open`;
+    placeTasks(G, s.g, s.color, -Math.PI / 2, Math.PI * 2, R, selected);
+  });
+}
+
+function blip(G, t, x, y, color, selected, ang) {
+  const B = S("g", { transform: `translate(${x},${y})`, class: "blip" + (selected === t.id ? " sel" : "") }, G);
+  if (t.openAsks.length) {
+    const big = t.openAsks.some(a => a.effort === "block"), s = big ? 9 : 6.5, dec = t.openAsks.some(a => a.kind === "decision");
+    if (Date.now() - t.oldest > 7 * OW.DAY) S("circle", { r: s + 5, class: "stalering" }, B);
+    if (dec) S("rect", { x: -s, y: -s, width: s * 2, height: s * 2, transform: "rotate(45)", fill: color, class: "b" }, B);
+    else S("circle", { r: s, fill: color, class: "b" }, B);
+    const right = Math.cos(ang) >= 0, dx = right ? s + 8 : -s - 8, anc = right ? "start" : "end";
+    S("text", { x: dx, y: 0, class: "tag", "text-anchor": anc }, B).textContent = t.title.length > 26 ? t.title.slice(0, 25) + "…" : t.title;
+    S("text", { x: dx, y: 12, class: "tag age", "text-anchor": anc }, B).textContent = OW.ago(t.oldest) + (big ? " · work block" : "") + (t.openAsks.length > 1 ? ` · ${t.openAsks.length} asks` : "");
+  } else if (t.status === "working") {
+    S("circle", { r: 4.5, fill: color, class: "b" }, B);
+  } else {
+    S("circle", { r: 3.2, fill: "none", stroke: color, "stroke-width": 1.4, opacity: 0.75 }, B);
+  }
+  S("circle", { r: 12, fill: "transparent" }, B);
+  B.onclick = e => { e.stopPropagation(); OW.open(t.id); };
+  B.onmousemove = e => OW.showTip(e, t.title, t.openAsks.length ? t.openAsks[0].text : t.status === "working" ? "Working" : `Last active ${t.lastActive ? OW.ago(t.lastActive) + " ago" : "?"}`);
+  B.onmouseleave = OW.hideTip;
+}
+
+// labels that would land on another label (or a goal name) move a line, then hide the name; the age stays
+function declutter() {
+  const kept = [...scope.querySelectorAll(".sector,.stitle,.scount")].map(e => e.getBoundingClientRect());
+  const hits = r => kept.some(k => r.left < k.right && r.right > k.left && r.top < k.bottom && r.bottom > k.top);
+  const view = svg.getBoundingClientRect(), right = view.right - (OW.selected ? 440 : 0);
+  [...scope.querySelectorAll(".blip")].filter(b => b.querySelector(".tag")).forEach(b => {
+    const name = b.querySelector(".tag:not(.age)"), age = b.querySelector(".tag.age");
+    // a label that would leave the screen flips to the other side of its blip
+    const rr = name.getBoundingClientRect();
+    if (rr.left < view.left + 4 || rr.right > right - 4)
+      for (const t of [name, age]) { t.setAttribute("x", -t.getAttribute("x")); t.setAttribute("text-anchor", t.getAttribute("text-anchor") === "end" ? "start" : "end"); }
+    for (let tries = 0; tries < 3; tries++) {
+      const r = name.getBoundingClientRect(), r2 = age.getBoundingClientRect();
+      const box = { left: Math.min(r.left, r2.left), right: Math.max(r.right, r2.right), top: r.top - 1, bottom: r2.bottom + 1 };
+      if (!hits(box)) { kept.push(box); return; }
+      const dy = (tries === 0 ? 1 : -1) * 13 * (tries + 1);
+      name.setAttribute("y", +name.getAttribute("y") + dy); age.setAttribute("y", +age.getAttribute("y") + dy);
+    }
+    name.setAttribute("display", "none");
+  });
+}
+
+function setMode(m) { mode = m; localStorage.setItem("ow.rings.mode", m); OW.data && render(OW.data, { selected: OW.selected }); }
+document.querySelectorAll(".mode button").forEach(b => b.onclick = () => setMode(b.dataset.m));
+addEventListener("keydown", e => { if (e.key === "v" && !(e.target.closest && e.target.closest("textarea,input"))) setMode(mode === "one" ? "split" : "one"); });
+svg.onclick = () => OW.close();
+addEventListener("resize", () => OW.data && render(OW.data, { selected: OW.selected }));
+OW.start("Overworld · Rings", "rings", render);
+</script></body></html>

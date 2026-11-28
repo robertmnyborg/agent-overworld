@@ -137,7 +137,7 @@ const OW = (() => {
     h.innerHTML = `<b class="ow-title"></b><span class="ow-metric"></span><span class="ow-trend"><svg class="ow-spark" width="84" height="20"></svg><span class="ow-delta"></span></span><span class="ow-sub"></span><span class="ow-flex"></span><nav class="ow-nav"></nav>`;
     h.querySelector(".ow-title").textContent = title;
     const nav = h.querySelector(".ow-nav");
-    [["A", "orbit"], ["B", "radar"], ["C", "atlas"]].forEach(([k, v]) => {
+    [["A", "orbit"], ["B", "radar"], ["C", "atlas"], ["D", "rings"]].forEach(([k, v]) => {
       const a = document.createElement("a");
       a.href = `/proto/${v}.html`; a.textContent = `${k} ${v[0].toUpperCase()}${v.slice(1)}`;
       if (v === viewName) a.className = "on";
